@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: LGPL-3.0-only
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+#
+# Build the documentation site from docs/ with Jennifer's Grimoire
+# (https://github.com/jennifer-language/grimoire) and publish it to GitHub Pages
+# on every push to main.
+#
+# Grimoire is itself Jennifer source, so this needs no toolchain beyond the
+# interpreter the test workflow already installs. docs/SUMMARY.md is the book
+# outline; grimoire.toml is the configuration.
+#
+# One-time manual step: the repository must have Pages enabled in
+# Settings -> Pages with "GitHub Actions" as the source.
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Deploying to Pages needs `pages: write` and `id-token: write`.
+# `contents: read` is the default, stated for clarity.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One Pages deployment at a time, and never cancel one mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site (Grimoire)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Checkout Grimoire
+        uses: actions/checkout@v7
+        with:
+          repository: jennifer-language/grimoire
+          path: .grimoire
+
+      - name: Install Jennifer
+        uses: ./.github/actions/install-jennifer
+
+      - name: Verify the documented examples still run
+        # The docs quote the examples, so a broken example means stale docs.
+        # Cheap enough to be worth catching before publishing rather than after.
+        run: |
+          for example in examples/*.j; do
+            jennifer run "$example" > /dev/null
+          done
+
+      - name: Build the site
+        # Grimoire reads grimoire.toml: src = "docs", out = "site". The outline
+        # comes from docs/SUMMARY.md, so a page added there appears in the
+        # sidebar without touching this workflow.
+        run: jennifer run .grimoire/bin/grimoire build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    name: Publish to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

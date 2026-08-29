@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: LGPL-3.0-only
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+#
+# The gate: formatting, lint, the white-box suite, and every example actually
+# running. Runs on every push to main and every pull request.
+#
+# The deck is plain Jennifer source with no build step, so the whole job is
+# "install an interpreter and run four commands". The interpreter comes from the
+# latest jennifer release tarball rather than from a checkout of the language
+# repository - a deck should be tested against a release a user could install,
+# not against language HEAD.
+
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: fmt, lint, test, examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Jennifer
+        uses: ./.github/actions/install-jennifer
+
+      - name: Show versions
+        run: jennifer version
+
+      - name: Check formatting
+        # `fmt -l` lists files that are not formatted and stays silent when all
+        # of them are, so a non-empty result is the failure.
+        run: |
+          unformatted="$(jennifer fmt -l src/bioinformatics.j src/bioinformatics_test.j src/topics/*.j examples/*.j tools/*.j)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::not formatted - run: jennifer fmt -w <file>"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Lint
+        # Four compilable units, which between them cover every line of the
+        # deck. A topic file cannot be linted alone - it is `include`d rather
+        # than compiled, so in isolation its calls into core.j read as
+        # undefined - but linting the module and the test overlay reaches all
+        # of them through the splice. The generators and examples are ordinary
+        # programs and lint directly.
+        run: |
+          jennifer lint src/bioinformatics.j
+          jennifer lint src/bioinformatics_test.j
+          jennifer lint examples/*.j
+          jennifer lint tools/*.j
+
+      - name: Test
+        run: jennifer test src/bioinformatics_test.j
+
+      - name: Run every example
+        # The examples are documentation that has to keep working. Several read
+        # testdata/ by a path relative to the working directory, so run from the
+        # repository root.
+        run: |
+          for example in examples/*.j; do
+            echo "--- $example"
+            jennifer run "$example" > /dev/null
+          done
+
+      - name: Check the generated data is in step with its generators
+        # tabledata.j and enzymedata.j are generated. Regenerate them here and
+        # fail if the result differs from what is committed, so the two cannot
+        # drift apart unnoticed.
+        run: |
+          jennifer run tools/gentables.j
+          jennifer run tools/genenzymes.j
+          jennifer fmt -w src/topics/tabledata.j src/topics/enzymedata.j
+          if ! git diff --quiet -- src/topics/tabledata.j src/topics/enzymedata.j; then
+            echo "::error::generated data differs from its generators - re-run tools/ and commit"
+            git diff --stat -- src/topics/tabledata.j src/topics/enzymedata.j
+            exit 1
+          fi
+
+  tiny:
+    name: jennifer-tiny
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Jennifer
+        uses: ./.github/actions/install-jennifer
+        with:
+          tinygo: 'true'
+
+      - name: Load and exercise the deck on the tiny build
+        # The deck claims to run on jennifer-tiny, and that claim is only worth
+        # making if it is checked. `jennifer test` is a development feature the
+        # constrained build does not carry, so the check is that the module
+        # loads and its examples produce output there - which exercises every
+        # topic, since each example is one topic's tour.
+        run: |
+          for example in examples/*.j; do
+            echo "--- $example"
+            jennifer-tiny run "$example" > /dev/null
+          done

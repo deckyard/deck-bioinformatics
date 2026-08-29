@@ -1,0 +1,9 @@
+# The documentation site, built from docs/ by Grimoire. Published to GitHub
+# Pages by .github/workflows/docs.yml; never committed.
+/site/
+
+# Checkouts CI makes inside the workspace, and that `grimoire serve` makes
+# locally: the interpreter built from source by .github/actions/install-jennifer,
+# and Grimoire itself.
+/.jennifer-src/
+/.grimoire/

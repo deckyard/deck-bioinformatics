@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: LGPL-3.0-only
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+#
+# Cut a GitHub release when a version tag is pushed.
+#
+# A deck has nothing to compile and no per-platform artifact: it is Jennifer
+# source, consumed by vendoring it into a project. So the release is the tag
+# plus a source tarball of what jvc would fetch, and the gate in front of it is
+# the same suite the test workflow runs - a red suite must not become a tag.
+
+name: release
+
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Jennifer
+        uses: ./.github/actions/install-jennifer
+
+      - name: Test
+        run: jennifer test src/bioinformatics_test.j
+
+      - name: Lint
+        # Four compilable units, which between them cover every line of the
+        # deck. A topic file cannot be linted alone - it is `include`d rather
+        # than compiled, so in isolation its calls into core.j read as
+        # undefined - but linting the module and the test overlay reaches all
+        # of them through the splice. The generators and examples are ordinary
+        # programs and lint directly.
+        run: |
+          jennifer lint src/bioinformatics.j
+          jennifer lint src/bioinformatics_test.j
+          jennifer lint examples/*.j
+          jennifer lint tools/*.j
+
+      - name: Run every example
+        run: |
+          for example in examples/*.j; do
+            jennifer run "$example" > /dev/null
+          done
+
+      - name: Check deck.toml matches the tag
+        # The manifest version is what jvc resolves against, so a tag that
+        # disagrees with it would publish a deck under the wrong number.
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          declared="$(sed -n 's/^version = "\(.*\)"$/\1/p' deck.toml | head -1)"
+          if [ "$tag" != "$declared" ]; then
+            echo "::error::tag $tag does not match deck.toml version $declared"
+            exit 1
+          fi
+          echo "deck.toml declares $declared, matching the tag"
+
+  release:
+    name: Create the release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Package the deck
+        # What a consumer vendors: the module source and the licence, without
+        # the tests, examples, generators or documentation. GitHub attaches its
+        # own full-repository archives alongside this one.
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          stage="bioinformatics-${tag}"
+          mkdir -p "dist/${stage}"
+          cp deck.toml LICENSE.md README.md "dist/${stage}/"
+          mkdir -p "dist/${stage}/src/topics"
+          cp src/bioinformatics.j "dist/${stage}/src/"
+          for f in src/topics/*.j; do
+            case "$f" in *_test.j) continue ;; esac
+            cp "$f" "dist/${stage}/src/topics/"
+          done
+          tar -czf "dist/${stage}.tar.gz" -C dist "$stage"
+          (cd dist && sha256sum "${stage}.tar.gz" > "${stage}.tar.gz.sha256")
+
+      - name: Write the release notes
+        run: |
+          cat > notes.md <<'EOF'
+          Sequence manipulation for DNA, RNA and protein, in Jennifer.
+
+          - **Docs:** https://jennifer-language.github.io/deck-bioinformatics/
+          - **Install:** add `"@jennifer/bioinformatics"` to your `deck.toml` and run `jvc install`
+
+          Requires Jennifer >= 0.25.0. No deck dependencies, no capabilities;
+          runs on `jennifer-tiny`.
+          EOF
+          echo "" >> notes.md
+          echo "## Changes" >> notes.md
+          echo "" >> notes.md
+          # Commit subjects since the previous tag, or since the beginning on
+          # the first one.
+          previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          if [ -n "$previous" ]; then
+            git log --no-merges --pretty='- %s' "${previous}..${GITHUB_REF_NAME}" >> notes.md
+          else
+            echo "- first release" >> notes.md
+          fi
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "bioinformatics ${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            dist/*.tar.gz dist/*.tar.gz.sha256

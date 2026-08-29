@@ -1,0 +1,21 @@
+[package]
+name = "@jennifer/bioinformatics"
+version = "0.1.0"
+description = "sequence manipulation for DNA, RNA and protein"
+license = "LGPL-3.0-only"
+authors = ["mplx <jennifer@mplx.dev>"]
+keywords = ["bioinformatics", "dna", "rna", "protein", "sequence", "fasta", "alignment"]
+
+[package.urls]
+deck = "https://raw.githubusercontent.com/jennifer-language/deck-bioinformatics/main/deck.toml"
+homepage = "https://github.com/jennifer-language/deck-bioinformatics"
+manual = "https://jennifer-language.github.io/deck-bioinformatics/"
+
+[engines]
+jennifer = ">=0.25.0"
+jennifer-tiny = ">=0.25.0"
+
+[decks]
+
+[provides]
+bioinformatics = "0.1.0"
