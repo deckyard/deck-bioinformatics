@@ -14,8 +14,3 @@ manual = "https://jennifer-language.github.io/deck-bioinformatics/"
 [engines]
 jennifer = ">=0.25.0"
 jennifer-tiny = ">=0.25.0"
-
-[decks]
-
-[provides]
-bioinformatics = "0.1.0"

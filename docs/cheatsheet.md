@@ -95,7 +95,7 @@ import "@jennifer/bioinformatics/" as bioseq;
 | | |
 | - | - |
 | `randomDna(n)` `randomRna(n)` `randomProtein(n)` | uniform |
-| `randomDnaWith(n, weights)` `randomRnaWith` `randomProteinWith` | weighted |
+| `randomDnaWith(n, weights)` `randomRnaWith(n, weights)` `randomProteinWith(n, weights)` | weighted |
 | `shuffle(s)` | composition-preserving |
 | `mutate(s, rate, kind)` | point substitutions |
 | `subrange(s, from, through)` | **1-based inclusive** |

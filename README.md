@@ -1,5 +1,9 @@
 # @jennifer/bioinformatics
 
+[![test](https://github.com/jennifer-language/deck-bioinformatics/actions/workflows/test.yml/badge.svg)](https://github.com/jennifer-language/deck-bioinformatics/actions/workflows/test.yml)
+[![Documentation](https://img.shields.io/badge/docs-github%20pages-blue)](https://jennifer-language.github.io/deck-bioinformatics/)
+[![release](https://img.shields.io/github/v/release/jennifer-language/deck-bioinformatics)](https://github.com/jennifer-language/deck-bioinformatics/releases/latest)
+
 **Sequence manipulation for DNA, RNA and protein**, in the
 [Jennifer](https://jennifer-lang.dev/) language.
 
@@ -78,10 +82,15 @@ a number; the story is in [Design notes](docs/design.md).
 
 | workflow | when | what |
 | --- | --- | --- |
-| [`test.yml`](.github/workflows/test.yml) | push, PR | fmt and lint over `src/`, `examples/` and `tools/`; the suite; every example; the generators; then every example again on `jennifer-tiny` |
-| [`docs.yml`](.github/workflows/docs.yml) | push to `main` | build `docs/` with Grimoire, publish to Pages |
+| [`test.yml`](.github/workflows/test.yml) | push, PR | fmt, lint, the header/overlay/cheatsheet guards, the suite, every example, the generator drift check, then every example again on `jennifer-tiny` |
+| [`docs.yml`](.github/workflows/docs.yml) | push, PR | build `docs/` with Grimoire; publish to Pages from `main` |
 | [`release.yml`](.github/workflows/release.yml) | version tag | re-run the gate, check `deck.toml` matches the tag, cut the release |
+
+The three workflows and the `tools/check-*.sh` guards are shared verbatim with
+the other deck repositories; `tools/deck-lib.sh` discovers what differs between
+them. `tools/check-extra.sh` is this deck's own hook, and is what re-runs the
+table generators to prove the committed data still matches them.
 
 ## License
 
-LGPL-3.0-only, see [LICENSE.md](LICENSE.md).
+LGPL-3.0-only, see [LICENSE](LICENSE).
