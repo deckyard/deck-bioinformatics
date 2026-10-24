@@ -31,7 +31,7 @@ of their own, stay cooked - a raw string ends at the first `'`.
 Run from the repository root; both write relative to the working directory.
 
 The reasoning behind this split is written up in
-[Design notes](https://jennifer-language.github.io/deck-bioinformatics/design.html#generated-data-hand-written-api).
+[Design notes](https://deckyard.github.io/deck-bioinformatics/design.html#generated-data-hand-written-api).
 
 ## Why generate at all
 
