@@ -1,18 +1,15 @@
 # Design notes
 
-The measurements below come from `examples/bench.j`, best of several runs on one
-developer machine. Read the **ratios**, not the milliseconds: the same tables
-reproduce on a machine roughly twice as fast without a single conclusion
-changing, so an absolute number that does not match your hardware is not
-evidence of a regression. `jennifer run examples/bench.j` shows where yours
-lands.
+The measurements come from `examples/bench.j`, best of several runs on one
+developer machine. Compare ratios, not milliseconds: on a machine about twice
+as fast every conclusion still holds, so a different absolute number is not a
+regression. `jennifer run examples/bench.j` shows yours.
 
 ## Byte loops, not string indexing
 
-Jennifer strings are **rune-indexed**, so `$s[$i..$i + 1]` rescans from the start
-of the string on every access and a per-residue loop goes quadratic. Sequences
-are ASCII, so every hot loop in the deck converts once to `bytes`, indexes that,
-and converts back at the end.
+Jennifer strings are rune-indexed, so `$s[$i..$i + 1]` rescans from the start on
+every access and a per-residue loop goes quadratic. Sequences are ASCII, so every
+hot loop converts once to `bytes`, indexes that, and converts back.
 
 | over 20 000 residues | |
 | - | - |
@@ -21,127 +18,105 @@ and converts back at the end.
 
 ## Accretion into a bytes buffer
 
-`lists.push` returns a fresh list every pass, so a loop that builds a result with
-it copies the whole thing N times:
+`lists.push` returns a new list each time, so building a result with it copies
+the whole result per step:
 
 | building a 20 000-residue result | |
 | - | - |
 | `lists.push` in a loop | 54 700 ms |
-| `$out[] = code;` append sugar | 19 ms |
-| `$s + "A"` string concatenation | 77 ms |
+| `$out[] = code;` append | 19 ms |
+| `$s + "A"` concatenation | 77 ms |
 
 ## Plain maps beat clever encodings
 
-A related measurement, on the deck's hottest verb. Three candidate
-implementations of `translate`, over 10 000 codons:
+Three implementations of `translate`, over 10 000 codons:
 
 | | |
 | - | - |
 | string-slice codon key | 1094 ms |
-| rebuild the key from bytes, map lookup | **63 ms** |
-| base-4 packed integer index into a 64-entry string | 78 ms |
+| key rebuilt from bytes, map lookup | **63 ms** |
+| base-4 packed index into a 64-entry string | 78 ms |
 
-The map lookup is not the bottleneck anyone assumes it is. The "clever" packed
-index lost, because its three helper calls per codon cost more than the lookup
-they were meant to avoid.
-
-Two consequences. The genetic codes stay plain `map of string to string`.
-And **a helper call inside a per-residue loop
-is expensive** in a tree-walking interpreter: case folding is written out as
-`if ($c >= 97 and $c <= 122)` rather than called.
+The packed index lost because its three helper calls per codon cost more than
+the lookup they replaced. So the genetic codes stay plain
+`map of string to string`, and a helper call inside a per-residue loop is
+avoided: case folding is written inline as `if ($c >= 97 and $c <= 122)`.
 
 ## Alignment is the one quadratic surface
 
-Everything else in the deck is linear in sequence length. Alignment is not, and
-the docs state a ceiling rather than pretending otherwise.
+Everything else is linear in sequence length.
 
 | | cells | |
 | - | - | - |
-| 50 × 50 | 2 500 | 86 ms |
-| 100 × 100 | 10 000 | 150 ms |
-| 200 × 200 | 40 000 | 458 ms |
-| 400 × 400 | 160 000 | 2.28 s |
+| 50 x 50 | 2 500 | 86 ms |
+| 100 x 100 | 10 000 | 150 ms |
+| 200 x 200 | 40 000 | 458 ms |
+| 400 x 400 | 160 000 | 2.28 s |
 
-About **70 000 cells a second**. The cost is linear in the number of cells -
-each 4x step down that table is a 4x step in time - and therefore **quadratic in
-sequence length**, which is what the ceiling is about. A few hundred residues a
-side is comfortable; a chromosome is out of the question.
+About 70 000 cells a second: linear in cells, so quadratic in sequence length. A
+few hundred residues a side is comfortable; a chromosome is out of scope. The
+50 x 50 row is mostly fixed overhead with run-to-run spread wider than the
+measurement; the linear shape shows from 100 x 100 on. Memory and the
+`maxCells` guard are in [Comparison](compare.md#performance-and-the-memory-limit).
 
-The 50 x 50 row is mostly fixed overhead rather than alignment: at that size the
-run-to-run spread is wider than the measurement itself, so the linear-in-cells
-shape is only visible from 100 x 100 down.
+The DP matrix is a flat `list of int` indexed `i * width + j`, and substitution
+scores for the two sequences are precomputed into a map keyed by the two bytes,
+so the inner loop is indexed reads and one lookup. The traceback recomputes
+which move produced each cell instead of keeping a direction matrix: same
+answer, half the memory.
 
-The matrix is a flat `list of int` indexed `i * width + j` rather than a list of
-lists, and the substitution scores for the two sequences are precomputed into a
-map keyed by the two bytes - so the inner loop is indexed reads and one lookup,
-with no string built and no helper called per cell. The traceback recovers each
-predecessor by recomputing which move produced the cell's value, rather than
-keeping a second direction matrix: same answer, half the memory.
+## Helpers return, they do not fill
 
-## Arguments are copied - helpers return, they do not fill
-
-Jennifer passes by value. A helper cannot fill in a list handed to it, because
-it appends to a copy.
+Jennifer passes arguments by value. A helper cannot fill in a list handed to
+it, because it appends to a copy; helpers return what they found and the
+caller concatenates.
 
 ## No filesystem, no network
 
-Nothing under `src/` opens a file, makes a request, or runs a subprocess. FASTA
-and FASTQ are parsed from and written to strings.
-
-Two things follow. The deck runs on `jennifer-tiny`, since there is no
-capability to declare. And every function is a pure transformation, so the whole
-test suite runs with fixtures embedded in the test files and nothing on disk.
-
-`examples/formats.j` is the only example that uses `fs`, and it does so as the
-caller - which is the boundary it exists to demonstrate.
+Nothing under `src/` opens a file, makes a request or runs a subprocess. The
+deck therefore runs on `jennifer-tiny` with no capability, and every test
+fixture is embedded in the test files. The examples that read `testdata/`
+(`formats.j`, `composition.j`, `search.j`, `manipulate.j`, `compare.j`) do it
+with `fs` as the caller; `formats.j` is the one written to show that boundary.
 
 ## Generated data, hand-written API
 
-Two topic files are wide, repetitive reference data where a transcription slip is
-invisible on review and wrong forever after: the genetic codes and residue
-properties, and the enzyme table. Both are generated by scripts in `tools/`.
+The genetic codes, residue properties and enzyme table are wide, repetitive data
+where a transcription slip is invisible in review. `tools/gentables.j` and
+`tools/genenzymes.j` generate them and hold the data in reviewable form: each
+alternative code as a short diff from the standard one. They assert invariants
+before writing: BLOSUM62 symmetric across all 576 pairs, every enzyme site
+palindromic with its cut offsets inside the site.
 
-The generators are where the review happens, because they express the data in
-its reviewable form and assert its invariants before emitting anything - each
-alternative genetic code as a four-line diff from the standard one, BLOSUM62's
-symmetry across all 576 pairs, every enzyme site palindromic and its cut offsets
-inside the site.
-
-**Generated data and hand-written API live in separate files** - `tabledata.j`
-against `tables.j`, `enzymedata.j` against `enzymes.j` - so a generator can only
-ever overwrite a file containing nothing but `def const`. That split exists
-because the first version did not have it: re-running a generator silently
-deleted the accessors that had been appended to its output.
+Generated data and hand-written accessors live in separate files (`tabledata.j`
+and `tables.j`, `enzymedata.j` and `enzymes.j`), so a generator only overwrites
+files holding nothing but `def const`. The first version had no split, and
+regenerating deleted accessors appended to the output.
 
 ## Correctness
 
-Numbers in this deck come from published parameter sets, and the tests are
-explicit about what each check actually proves:
+The tests distinguish three kinds of check:
 
-**External anchors** - a value published independently of this deck. The
-strongest is bradykinin's average molecular weight, a mass spectrometry
-calibration standard: the deck computes **1060.22** against a published ~1060.2,
-which validates the residue masses and the residues-plus-water convention
-together. Translation is anchored on the human preproinsulin coding sequence and
-its published protein, so a slip anywhere in the 64-entry codon table shows up
-as a wrong protein rather than as a passing tautology.
+- **External anchors**, values published independently of the deck.
+  Bradykinin's average mass, a mass-spectrometry calibration standard: the deck
+  computes 1060.22 against a published ~1060.2, which validates the residue
+  masses and the residues-plus-water convention together. Translation is
+  anchored on the human preproinsulin CDS and its published protein, so a slip
+  in the codon table shows up as a wrong protein.
+- **Cross-implementation checks**, values computed separately from the same
+  published parameters: the nearest-neighbour Tm and the isoelectric points.
+  They catch coding errors, not parameter errors, and are labelled as such.
+- **Property checks**, invariants independent of parameters: charge falls
+  monotonically with pH; Tm rises with GC, length and salt; each residue's
+  synonymous codon fractions sum to 1.0; a digest's fragments reassemble to the
+  original; an alignment's rows are the inputs with gaps added.
 
-**Cross-implementation checks** - a value computed separately from the *same*
-published parameters. The nearest-neighbour melting temperatures and the
-isoelectric points are of this kind. They catch coding errors, not parameter
-errors, and are labelled as such rather than dressed up as validation.
-
-**Property checks** - invariants that hold whatever the parameters are: charge
-falls monotonically with pH, Tm rises with GC and length and salt, each residue's
-synonymous codon fractions sum to 1.0, a digest's fragments reassemble to the
-original, an alignment's rows are the originals with gaps removed.
-
-## What is deliberately absent
+## Not included
 
 | | |
 | - | - |
-| Affine gap penalties | linear gaps only; Gotoh is the obvious next step |
+| Affine gap penalties | linear gaps only; Gotoh would be next |
 | Type IIS enzymes | their cut geometry does not fit two in-site offsets |
-| PDB and 3-D structure | excluded; a much larger effort |
-| Multiple sequence alignment | out of scope for the catalogue |
-| Streaming and high-throughput | a different deck with a different posture |
+| PDB and 3-D structure | a much larger effort |
+| Multiple sequence alignment | outside the catalogue |
+| Streaming and high-throughput | a different deck |

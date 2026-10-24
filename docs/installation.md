@@ -1,54 +1,41 @@
 # Installation
 
-`@jennifer/bioinformatics` is a **deck**: a versioned bundle of Jennifer
-modules, vendored into the project that uses it rather than installed globally.
-
 ## With jvc
 
-Once [jvc](https://jennifer-lang.dev/) is available, declare the dependency in
-your project's `deck.toml`:
+```sh
+jvc add @deckyard/bioinformatics
+```
+
+or declare it in your project's `deck.toml` and run `jvc install`:
 
 ```toml
 [decks]
-"@jennifer/bioinformatics" = ">=0.1.0"
+"@deckyard/bioinformatics" = ">=0.1.0"
 ```
 
-then
-
-```sh
-jvc install
-```
-
-which writes the deck into the project-local `vendor/` tree. Import it by its
-scoped name:
+`jvc` vendors the deck's `src/` to `vendor/deckyard/bioinformatics/`. Import it
+by its scoped name; the trailing slash resolves to the entry module:
 
 ```jennifer
-import "@jennifer/bioinformatics/" as bioseq;
+import "@deckyard/bioinformatics/" as bioseq;
 ```
-
-The trailing slash expands to the package-named entry point. The alias is not
-optional dressing: the package is named for the field, but the calls are named
-for the thing they act on, and `bioseq.reverseComplement($s)` reads better in a
-pipeline than `bioinformatics.reverseComplement($s)`. Every example in this
-documentation binds `bioseq`, so keeping that alias makes the snippets
-copy-paste directly. Import it under another name if you prefer - nothing in
-the deck depends on what the caller calls it.
 
 ## Without jvc
 
-The deck is plain Jennifer source with no build step, so a checkout works
-directly:
+Unpack the `src/` subtree of a release archive
+(`deckyard-bioinformatics-<version>.tar.gz`) into
+`vendor/deckyard/bioinformatics/`, or import a checkout directly. There is no
+build step:
 
 ```sh
-git clone https://github.com/jennifer-language/deck-bioinformatics
+git clone https://github.com/deckyard/deck-bioinformatics
 ```
 
 ```jennifer
 import "./deck-bioinformatics/src/bioinformatics.j" as bioseq;
 ```
 
-That is how the examples in this repository import it, so they run against a
-checkout with nothing installed.
+The examples in this repository import `../src/bioinformatics.j` the same way.
 
 ## Requirements
 
@@ -56,22 +43,18 @@ checkout with nothing installed.
 | - | - |
 | Jennifer | `>=0.25.0` |
 | Deck dependencies | none |
-| Capabilities | none - no `net`, no `exec` |
+| Capabilities | none (no `net`, `exec` or filesystem) |
 | Builds | `jennifer` and `jennifer-tiny`, both listed in `[engines]` |
 
-The engine floor comes from the mathematical foundations the thermodynamic and
-isoelectric-point formulas need (`exp`, `ln`, `log`). Everything else the deck
-uses - `strings`, `lists`, `maps`, `math`, `regex`, `convert` - has been in the
-standard library far longer.
+The floor comes from the `math` functions the thermodynamic and pI formulas need
+(`math.ln`, `math.pow`). The deck also uses `strings`, `maps`, `convert`,
+`binary` and `io`.
 
 ## Checking it works
 
 From a checkout:
 
 ```sh
-jennifer test src/bioinformatics_test.j     # the white-box suite
-jennifer run examples/transforms.j  # the front door, no files needed
+jennifer test src/bioinformatics_test.j   # fixtures are embedded, no files needed
+jennifer run examples/transforms.j        # needs no testdata/
 ```
-
-The suite is network-free, subprocess-free and filesystem-free, with every
-fixture embedded in the test files, so it runs unchanged under `jennifer-tiny`.

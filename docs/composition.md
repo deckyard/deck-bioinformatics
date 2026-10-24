@@ -1,51 +1,34 @@
 # Composition and properties
 
-What a sequence is made of, and what that implies about the molecule.
-
-This is the topic where the numbers come from published parameter sets rather
-than from arithmetic on the sequence alone. Two sets can disagree about the same
-sequence, so **every formula here names its source**, and the parameters are
-exported constants you can read.
-
-Runnable version: `jennifer run examples/composition.j`.
+Runnable: `jennifer run examples/composition.j`. The parameter sets behind these
+numbers are exported; see [Parameter constants](tables.md#parameter-constants).
 
 ## Composition
 
 ```jennifer
 bioseq.baseCount("AATTGGCC");       # {"A": 2, "T": 2, "G": 2, "C": 2}
 bioseq.baseFrequency($gene);        # the same, as percentages
-bioseq.residueCount($protein);      # the protein counterpart
+bioseq.residueCount($protein);
 bioseq.residueFrequency($protein);
 ```
 
-A residue that does not occur has no entry, rather than an entry of zero - guard
-a lookup with `maps.has`.
+Only residues present get an entry; guard a lookup with `maps.has`.
 
 ## GC content
 
 ```jennifer
 bioseq.gcContent("ATGCGC");   # 66.67
 bioseq.atContent("ATGCGC");   # 33.33
-```
-
-Ambiguity codes count toward the length but toward neither figure, which is what
-keeps the two from summing above 100 on a sequence carrying `N`. On an
-unambiguous sequence they partition it exactly.
-
-### Along the sequence
-
-A genome's average GC says little; its local variation says a great deal -
-isochores, horizontally transferred regions and promoters all show up as
-departures from the local baseline.
-
-```jennifer
 bioseq.gcWindows($genome, 100, 50);   # list of float, one per window
 ```
 
-The last partial window is dropped, so every value covers exactly `size` bases
-and the series is comparable along its length. [`windows`](manipulate.md#windows)
-cuts the sequence the same way when you want the subsequences rather than their
-GC.
+Ambiguity codes count toward the length but toward neither G/C nor A/T/U, so on
+a sequence with `N` (or `S`) the two sum to less than 100.
+
+`gcWindows(s, size, step)` starts a window every `step` bases and drops the last
+partial window, so every value covers exactly `size` bases;
+[`windows`](manipulate.md#windows) cuts identically. A sequence shorter than
+one window raises.
 
 ## Molecular weight
 
@@ -55,57 +38,42 @@ bioseq.molecularWeight($rna, bioseq.RNA);
 bioseq.molecularWeight($protein, bioseq.PROTEIN);
 ```
 
-For `DNA` and `RNA` this is a **single strand with a free 5′ hydroxyl** - a
-synthesised oligo, not a duplex and not a phosphorylated one. Residue masses are
-summed, one water is added for the termini, and one metaphosphate is removed.
-Double it, roughly, for a duplex. For `PROTEIN` it is the residue masses plus
-one water, the ExPASy convention.
+Average masses, in daltons.
 
-Ambiguity codes raise. See [Sequences](sequences.md#ambiguity-codes-are-rejected-not-averaged).
+- `DNA`, `RNA`: one strand with a free 5' hydroxyl (an unphosphorylated
+  synthetic oligo): residue masses + `WATER_AVG_MASS` - `PHOSPHATE_MASS`. Roughly
+  double it for a duplex.
+- `PROTEIN`: residue masses (`avgMass` of each [`AminoAcid`](tables.md#residue-properties))
+  + one water, the ExPASy convention.
 
-**Parameters:** `DNA_RESIDUE_MASS`, `RNA_RESIDUE_MASS`, `PHOSPHATE_MASS`,
-`WATER_AVG_MASS`, and `avgMass` on each [`AminoAcid`](tables.md#residue-properties)
-record.
+Ambiguity codes raise ([why](sequences.md#ambiguity-codes-are-rejected-not-averaged)).
 
 ## Melting temperature
 
-Two models, and the difference between them is the point.
-
 ```jennifer
-bioseq.meltingTemp("ATGCATGCATGCATGC");     # 48.0  - the Wallace rule
-bioseq.meltingTempNn("ATGCATGCATGCATGC");   # the nearest-neighbour model
+bioseq.meltingTemp("ATGCATGCATGCATGC");                     # 48.0, Wallace rule
+bioseq.meltingTempNn("ATGCATGCATGCATGC");                   # 50.7, 250 nM primer, 50 mM Na+
+bioseq.meltingTempNnWith("ATGCATGCATGCATGC", 250.0, 100.0); # 53.9, 100 mM Na+
 ```
 
-**The Wallace rule** is `2(A+T) + 4(G+C)`: crude, instant, and still the number
-quoted on a primer tube. It is calibrated for oligos of roughly 14 to 20 bases
-and is merely extrapolated beyond that - applied to a gene it returns a large
-number with no physical meaning.
+Both take DNA only, in degrees Celsius, and raise on ambiguity codes.
 
-**The nearest-neighbour model** reads the bases in order, because stacking energy
-depends on which base follows which. Enthalpy and entropy are summed over the
-sequence's dinucleotides, corrected for helix initiation at each end, for salt,
-and for self-complementarity.
+**Wallace rule**: `2(A+T) + 4(G+C)`. Calibrated for oligos of about 14 to 20
+bases; on longer sequences it returns a number with no physical meaning.
 
-The consequence, and the reason the model exists:
+**Nearest-neighbour**: SantaLucia (1998) unified parameters (`NN_ENTHALPY`,
+`NN_ENTROPY`, `GAS_CONSTANT`). Enthalpy and entropy are summed over the
+dinucleotides, with helix initiation per terminal base, a salt correction and a
+self-complementarity correction, then `Tm = dH / (dS + R ln(Ct/4)) - 273.15`.
+Needs at least two bases; concentrations must be positive (`primerNm` in nM,
+`saltMm` in mM). Other parameter sets differ by a degree or two.
+
+Order matters to the stacking model, not to Wallace:
 
 | oligo | Wallace | nearest-neighbour |
 | - | - | - |
 | `GCGCGC` | 24.0 | 22.8 |
 | `GGGCCC` | 24.0 | 10.4 |
-
-Identical composition. Wallace cannot tell them apart; the real model puts them
-**12.4 °C** apart.
-
-Conditions are parameters rather than constants, because they change the answer:
-
-```jennifer
-bioseq.meltingTempNn($primer);                       # 250 nM primer, 50 mM Na+
-bioseq.meltingTempNnWith($primer, 250.0, 100.0);     # ~3.4 C higher
-```
-
-**Parameters:** SantaLucia (1998) unified set, exported as `NN_ENTHALPY` and
-`NN_ENTROPY`, with `GAS_CONSTANT`. Other published sets differ by a degree or
-two; this one is named so the difference is attributable.
 
 ## Protein chemistry
 
@@ -116,52 +84,38 @@ bioseq.gravy($protein);
 bioseq.aromaticity($protein);
 ```
 
-**Net charge** sums the fractional protonation of every ionisable group: the two
-termini and the side chains of D, E, C, Y (acidic) and H, K, R (basic). It falls
-monotonically with pH.
+All four raise on an empty or non-protein sequence; the first three also on
+`B`, `Z`, `X`, `J` or `*`.
 
-**The isoelectric point** is where that curve crosses zero, found by bisection.
-Because the curve is monotone the search always converges.
+**Net charge** sums the fractional charge of the two termini and the side chains
+of D, E, C, Y (acidic) and H, K, R (basic). It decreases monotonically with pH.
 
-> The value depends on the pKa set. EMBOSS, ExPASy and Sillero disagree by a few
-> tenths of a pH unit on the same sequence. This deck uses the **EMBOSS `iep`**
-> set, exported as `PKA_N_TERMINUS`, `PKA_C_TERMINUS` and the `pKa` field on each
-> residue record - so compare against `iep`, not against ProtParam.
+**Isoelectric point**: bisection on the net charge over pH 0 to 14, stopping
+within 1e-4 of zero or after 100 steps. The pKa values are the EMBOSS `iep` set
+(`PKA_N_TERMINUS`, `PKA_C_TERMINUS`, `AminoAcid.pKa`); EMBOSS, ExPASy and
+Sillero differ by a few tenths of a unit, so compare against `iep`, not
+ProtParam.
 
-**GRAVY** is the mean Kyte-Doolittle hydropathy. Positive means hydrophobic
-overall; a soluble globular protein usually lands between -0.5 and -1.5, and a
-membrane-spanning one runs positive. The insulin signal peptide in the test data
-scores **+1.25**, which is what a sequence whose job is to cross a membrane
-should look like.
+**GRAVY**: mean Kyte-Doolittle hydropathy. Positive is hydrophobic; soluble
+globular proteins typically score -0.5 to -1.5. The preproinsulin signal
+fragment in `testdata/` scores +1.25.
 
-**Aromaticity** is the fraction of F, W and Y.
+**Aromaticity**: fraction of F, W and Y, 0 to 1.
 
 ## Summaries
-
-```jennifer
-def s as bioseq.DnaStats init bioseq.dnaStats($gene);
-def p as bioseq.ProteinStats init bioseq.proteinStats($protein);
-```
-
-`DnaStats` carries `length`, `gc`, `at`, `counts`, `molecularWeight`,
-`meltingTemp` and `ambiguous`. `ProteinStats` carries `length`,
-`molecularWeight`, `isoelectricPoint`, `gravy`, `aromaticity`, `counts` and
-`ambiguous`.
-
-These are the convenience form, for a report or a table. When the sequence
-carries a code with no defined mass or pKa, the summary still gives you length,
-composition and GC - it sets `ambiguous` and reports the undefined figures as
-`0.0` rather than raising or inventing them:
 
 ```jennifer
 def s as bioseq.DnaStats init bioseq.dnaStats("ATGCNNNN");
 $s.gc;               # 25.0
 $s.ambiguous;        # true
-$s.molecularWeight;  # 0.0 - not a guess
+$s.molecularWeight;  # 0.0
+def p as bioseq.ProteinStats init bioseq.proteinStats($protein);
 ```
 
-Note that `DnaStats.meltingTemp` is the Wallace figure, so read it together with
-`length`; on anything gene-sized it is extrapolated well past the rule's range.
+One call per report row. With ambiguity codes the summary still has length,
+counts and GC/AT (DNA) or aromaticity (protein); mass, Tm, pI and GRAVY are
+`0.0` and `ambiguous` is true. `dnaStats` rejects RNA. `DnaStats.meltingTemp`
+is the Wallace figure. Fields: [cheatsheet](cheatsheet.md#dnastats).
 
 ## Codon usage
 
@@ -171,28 +125,9 @@ for (def u in bioseq.codonUsage($cds)) {
 }
 ```
 
-Each `CodonUse` gives `codon`, `aminoAcid`, `count`, `fraction` and
-`perThousand`. `fraction` is the share of that residue's *synonymous* codons,
-which is the figure a codon-usage table reports and the one that matters: a
-highly expressed gene leans hard on a few preferred codons, and that bias is
-what codon-optimisation software rewrites. In the insulin fragment, `CTG` takes
-6 of the 8 leucines.
-
-Each residue's fractions sum to 1.0, and the `perThousand` column sums to 1000.
-`codonUsageWith` takes an alternative table.
-
-## The surface
-
-| | |
-| - | - |
-| `baseCount(s)` / `baseFrequency(s)` | nucleotide composition |
-| `residueCount(p)` / `residueFrequency(p)` | protein composition |
-| `gcContent(s)` / `atContent(s)` | percentages |
-| `gcWindows(s, size, step)` | the GC-plot series |
-| `molecularWeight(s, kind)` | daltons |
-| `meltingTemp(s)` | Wallace rule |
-| `meltingTempNn(s)` / `meltingTempNnWith(s, primerNm, saltMm)` | nearest-neighbour |
-| `netCharge(p, ph)` / `isoelectricPoint(p)` | |
-| `gravy(p)` / `aromaticity(p)` | |
-| `dnaStats(s)` / `proteinStats(p)` | one-pass summaries |
-| `codonUsage(nt)` / `codonUsageWith(nt, table)` | → `list of CodonUse` |
+One `CodonUse` per codon present, in first-seen order. `fraction` is the share
+among codons for the same residue (each residue's fractions sum to 1.0);
+`perThousand` sums to 1000. In the insulin fragment `CTG` is 6 of the 8
+leucines (0.75). Codons are reported DNA-spelled; a codon the table does not
+hold (one with an ambiguity code) counts under residue `X`. `codonUsageWith`
+takes a codon table.

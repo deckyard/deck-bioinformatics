@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - enzymes: lookup over the restriction enzyme table.
@@ -14,8 +14,8 @@
 /**
  * Look up a restriction enzyme by name.
  *
- * The lookup is case-insensitive - `enzyme("ecori")` and `enzyme("EcoRI")` both
- * work - but the returned record carries the conventional spelling.
+ * Case-insensitive (`enzyme("ecori")` works); the record carries the
+ * conventional spelling.
  *
  * @param name {string} the enzyme name, any case
  * @return {Enzyme} the enzyme record
@@ -70,13 +70,12 @@ export func enzymeNames() {
 /**
  * Enzymes that recognise the same sequence as the named one.
  *
- * True isoschizomers (`HpaII` / `MspI`) recognise and cut identically;
- * neoschizomers (`SmaI` / `XmaI`) recognise the same site but cut it at
- * different positions, which changes the ends you get. Both are returned - read
- * `cutTop` to tell them apart.
+ * Matches the stored site string exactly, so both true isoschizomers
+ * (`HpaII` / `MspI`, same cut) and neoschizomers (`SmaI` / `XmaI`, different cut)
+ * are returned; compare `cutTop` to tell them apart.
  *
  * @param name {string} the enzyme name, any case
- * @return {list of string} the other enzymes sharing its recognition site
+ * @return {list of string} the other enzymes with the same site, alphabetical
  * @throws {Error} kind "bioinformatics" when the deck does not carry that enzyme
  * @example bioseq.isoschizomers("SmaI")   # ["XmaI"]
  */

@@ -1,24 +1,16 @@
 # Comparison
 
-Pairwise alignment and distance.
+Runnable: `jennifer run examples/compare.j`.
 
-Runnable version: `jennifer run examples/compare.j`.
+## Global or local
 
-## Which alignment
-
-**Global** - [Needleman-Wunsch](https://doi.org/10.1016/0022-2836(70)90057-4) -
-aligns both sequences end to end, padding with gaps. Every residue of both
-appears in the result. This is the right question for two sequences believed
-homologous over their whole length: two alleles of a gene, or the same protein
-from two species.
-
-**Local** - [Smith-Waterman](https://doi.org/10.1016/0022-2836(81)90087-5) -
-finds the single best-matching stretch and discards everything outside it. This
-is the right question for a short sequence against a long one, or for a shared
-domain inside two otherwise unrelated proteins.
-
-Using the wrong one is the most common mistake: a global alignment of a probe
-against a chromosome spends its entire score on terminal gaps.
+- **Global**, [Needleman-Wunsch](https://doi.org/10.1016/0022-2836(70)90057-4)
+  (`alignGlobal`): both sequences end to end, every residue in the result. For
+  sequences homologous over their whole length.
+- **Local**, [Smith-Waterman](https://doi.org/10.1016/0022-2836(81)90087-5)
+  (`alignLocal`): the single best-matching stretch. For a short sequence against
+  a long one, or a shared domain. A global alignment of a probe against a long
+  sequence spends its score on terminal gaps.
 
 ```jennifer
 def opts as bioseq.AlignOptions init bioseq.dnaOptions();
@@ -33,49 +25,36 @@ bioseq.dnaOptions();       # +2 match, -1 mismatch, -2 gap
 bioseq.proteinOptions();   # BLOSUM62, -8 gap
 ```
 
-`AlignOptions` carries `matchScore`, `mismatchScore`, `gapScore` and `matrix`.
-When `matrix` is non-empty it replaces the match/mismatch pair entirely.
+A non-empty `matrix` replaces `matchScore` and `mismatchScore`. Gaps are linear:
+every gap position costs `gapScore`. Affine gaps are not implemented.
 
-Gap scoring is **linear**: every gap position costs the same. Affine gaps - a
-larger penalty to open than to extend, which models indels better - are the
-obvious next step and are deliberately not in this release.
+A substitution matrix scores conservative substitutions above disruptive ones,
+which a match/mismatch pair cannot:
 
-### Why protein needs a matrix
-
-Leucine against isoleucine is a conservative substitution that barely changes a
-protein. Leucine against aspartate is not. A match/mismatch score cannot express
-that difference; a substitution matrix can:
-
-| pair | BLOSUM62 | |
-| - | - | - |
-| L → L | +4 | identical |
-| L → I | +2 | conservative |
-| K → R | +2 | conservative |
-| F → Y | +3 | conservative |
-| L → D | -4 | disruptive |
-| W → P | -4 | disruptive |
+| pair | BLOSUM62 |
+| - | - |
+| L-L | +4 |
+| L-I | +2 |
+| K-R | +2 |
+| F-Y | +3 |
+| L-D | -4 |
+| W-P | -4 |
 
 ```jennifer
 bioseq.substitutionScore(bioseq.BLOSUM62, "W", "W");   # 11
 bioseq.substitutionScore(bioseq.BLOSUM62, "L", "I");   # 2
 ```
 
-`BLOSUM62` is stored as a symmetric upper triangle, so read it through
-`substitutionScore`, which tries both orders, rather than indexing it directly.
+`BLOSUM62` stores one order of each pair (300 entries over the twenty residues,
+`B`, `Z`, `X` and `*`), so read it through `substitutionScore`, which tries both.
+An uncovered pair scores the matrix's `XX` entry (-1), or 0 for a matrix without
+one.
 
 ## Reading an alignment
 
-An `Alignment` carries `a`, `b`, `markup`, `score`, `length`, `identities`,
-`similarities`, `gaps`, `startA` and `startB`.
-
-`a` and `b` are the sequences with gaps inserted; strip the gaps and you have the
-originals back. `markup` is one character per column:
-
-| | |
-| - | - |
-| `\|` | identical residues |
-| `:` | different, but scoring positively - a conservative substitution |
-| space | anything else, including a gap |
+`a` and `b` are the aligned sequences with `-` for gaps. For a global alignment,
+removing the gaps gives the normalised inputs back. `markup` has one character per column: `|` identical,
+`:` different but scoring positively, space otherwise.
 
 ```
 MALWMRLLPLLALLALWGPDPAAA
@@ -89,32 +68,29 @@ MALWLKILPLVALLALWGPDPAAA
 bioseq.percentIdentity($al);
 bioseq.percentSimilarity($al);
 bioseq.percentGaps($al);
-bioseq.formatAlignment($al, 60);   # numbered blocks, EMBOSS style
+bioseq.formatAlignment($al, 60);   # EMBOSS-style numbered blocks
 ```
 
-Identity is measured over the alignment's own length, gaps included - so a
-global alignment of two sequences of very different lengths reports a low
-identity even when the shorter matches perfectly. That is the honest answer to
-the question asked; ask `alignLocal` a different one.
-
-Similarity only differs from identity under a substitution matrix. With plain
-match/mismatch scoring nothing but an identity can score positively, so the two
-are equal.
+The percentages are over the alignment's length, gap columns included, so a
+global alignment of sequences of different lengths reports low identity even
+when the shorter matches perfectly. Without a matrix, similarity equals
+identity. `formatAlignment` numbers rows by 1-based residue position in the
+original sequences, gaps not counted. These four raise on an empty `Alignment`
+or one whose row lengths disagree with `length` (possible when built by hand).
 
 ### Local alignment coordinates
 
-`startA` and `startB` locate the alignment in the sequences you passed in:
+`startA` and `startB` are 0-based offsets of the aligned region (0 for a global
+alignment):
 
 ```jennifer
 def matched as string init strings.replace($al.a, "-", "");
 $one[$al.startA..$al.startA + len($matched)] == $matched;   # true
 ```
 
-Note that a local alignment's **boundaries are soft** unless the flanks are
-genuinely dissimilar. Smith-Waterman keeps extending outward while the running
-score rises, and with +2 for a match against -1 for a mismatch, random sequence
-still scores above zero on average. Expect the reported span to reach a little
-past the region you were looking for.
+Local boundaries are soft. With +2/-1 scoring, random sequence still scores
+above zero on average, so the reported span can reach past the region of
+interest.
 
 ## Distances
 
@@ -124,69 +100,49 @@ bioseq.editDistance("ATGC", "AGC");       # 1
 bioseq.editDistance("kitten", "sitting"); # 3
 ```
 
-**Hamming** counts differing positions and therefore requires equal lengths - it
-has no way to express an insertion. It refuses unequal lengths rather than
-guessing.
-
-**Edit distance** (Levenshtein) allows insertions and deletions as well, each
-costing one.
-
-Where the two part company is instructive. Shift a sequence by one position:
+**Hamming** counts differing positions and raises on unequal lengths.
+**Edit distance** (Levenshtein) counts insertions, deletions and substitutions,
+each costing one. A sequence shifted by one position (12 bases in
+`examples/compare.j`):
 
 | | |
 | - | - |
-| Hamming | **12** - every position looks wrong |
-| edit | **2** - one deletion and one insertion |
+| Hamming | 12 |
+| edit | 2 (one deletion, one insertion) |
 
-Computed with two rows rather than a full matrix, so edit distance costs
-`O(min(n, m))` memory. The time is still `O(n·m)`.
+Edit distance keeps two rows of `len(b) + 1` entries: O(m) memory in the second
+sequence's length, O(n*m) time, and no `maxCells` limit.
 
-## Performance
+## Performance and the memory limit
 
-Alignment is this deck's one `O(n·m)` surface. Measured at about **70 000 cells
-a second**, with cost quadratic in sequence length:
+Alignment is the deck's one O(n*m) surface: about 70 000 cells a second.
 
 | | cells | time |
 | - | - | - |
-| 50 × 50 | 2 500 | 86 ms |
-| 100 × 100 | 10 000 | 150 ms |
-| 200 × 200 | 40 000 | 458 ms |
-| 400 × 400 | 160 000 | 2.28 s |
+| 50 x 50 | 2 500 | 86 ms |
+| 100 x 100 | 10 000 | 150 ms |
+| 200 x 200 | 40 000 | 458 ms |
+| 400 x 400 | 160 000 | 2.28 s |
 
-But **memory binds first, and binds harder**. Every matrix entry is a boxed
-interpreter value, measured at roughly **a kilobyte per cell**:
+Memory runs out first: every matrix entry is a boxed interpreter value, about a
+kilobyte per cell.
 
 | | cells | resident |
 | - | - | - |
-| 100 × 100 | 10 000 | 35 MB |
-| 350 × 350 | 122 500 | 151 MB |
-| 700 × 700 | 490 000 | 570 MB |
+| 100 x 100 | 10 000 | 35 MB |
+| 350 x 350 | 122 500 | 151 MB |
+| 700 x 700 | 490 000 | 570 MB |
 
-So 1000 × 1000 is about a gigabyte, and 2000 × 2000 is not a wait but an
-out-of-memory kill. That is why `AlignOptions.maxCells` exists and is set by
-default to `DEFAULT_MAX_ALIGNMENT_CELLS` - a million cells, or a thousand
-residues square. Aligning two untrusted sequences would otherwise be a reliable
-way to take the process down.
+1000 x 1000 is about a gigabyte; 2000 x 2000 is an out-of-memory kill. So
+`AlignOptions.maxCells` defaults to `DEFAULT_MAX_ALIGNMENT_CELLS` (1 000 000).
+The matrix has `(len(a) + 1) * (len(b) + 1)` cells, and an alignment over the
+limit raises before allocating. Without the limit, aligning two untrusted
+sequences can take the process down.
 
 ```jennifer
 def opts as bioseq.AlignOptions init bioseq.dnaOptions();
-$opts.maxCells = 4000000;   # you have the memory and you mean it
+$opts.maxCells = 4000000;   # about 4 GB
 ```
 
-Setting it to `0` removes the limit. Reproduce the numbers with
-`jennifer run examples/bench.j`; the reasoning is in
-[Design notes](design.md#alignment-is-the-one-quadratic-surface).
-
-## The surface
-
-| | |
-| - | - |
-| `AlignOptions` | `matchScore`, `mismatchScore`, `gapScore`, `matrix` |
-| `dnaOptions()` / `proteinOptions()` | defaults |
-| `substitutionScore(matrix, a, b)` | order-independent lookup |
-| `alignGlobal(a, b, opts)` | Needleman-Wunsch |
-| `alignLocal(a, b, opts)` | Smith-Waterman |
-| `percentIdentity(al)` / `percentSimilarity(al)` / `percentGaps(al)` | |
-| `formatAlignment(al, width)` | numbered blocks |
-| `hammingDistance(a, b)` / `editDistance(a, b)` | |
-| `BLOSUM62` | the substitution matrix |
+`0` removes the limit. `jennifer run examples/bench.j` reproduces the numbers;
+see [Design notes](design.md#alignment-is-the-one-quadratic-surface).

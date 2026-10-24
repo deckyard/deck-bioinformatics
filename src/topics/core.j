@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - core: alphabets, validation, and the byte-loop conventions every
@@ -21,13 +21,13 @@
 # ---------------------------------------------------------------- molecule kind
 
 /**
- * Molecule kind: deoxyribonucleic acid. Passed where a verb's answer depends on
- * which molecule it is looking at, such as `molecularWeight`.
+ * Molecule kind: DNA. Passed where the answer depends on the molecule, such as
+ * `molecularWeight`.
  */
 export def const DNA as int init 1;
 
 /**
- * Molecule kind: ribonucleic acid.
+ * Molecule kind: RNA.
  */
 export def const RNA as int init 2;
 
@@ -186,10 +186,9 @@ func describeCode(code as int) {
 /**
  * Keep only the DNA alphabet, dropping every other character.
  *
- * The lenient counterpart to the validating verbs: where `reverseComplement`
- * raises on a stray character, this silently strips it. Lowercase input is
- * uppercased. `U` is *not* kept - a sequence spelled with `U` is RNA, so use
- * `filterRna`, or `backTranscribe` to move it to DNA.
+ * The lenient counterpart to the validating verbs: anything outside
+ * `DNA_ALPHABET` is dropped without error, including `U` (use `filterRna`) and
+ * gap characters. Lowercase is uppercased. Returns "" when nothing is left.
  *
  * @param s {string} any text - pasted sequence, numbered listing, FASTA body
  * @return {string} the retained residues, uppercased
@@ -258,7 +257,7 @@ export func isDna(s as string) {
 }
 
 /**
- * Is every character of `s` in the RNA alphabet?
+ * Is every character of `s` in the RNA alphabet? Case-insensitive; false for "".
  *
  * @param s {string} the candidate sequence
  * @return {bool} true when non-empty and wholly within `RNA_ALPHABET`
@@ -270,9 +269,8 @@ export func isRna(s as string) {
 /**
  * Is every character of `s` in the protein alphabet?
  *
- * Note that `ACGT` satisfies both this and `isDna` - a four-residue peptide and
- * a four-base oligo are spelled the same way. Ask the user, or ask `isDna`
- * first, when the distinction matters.
+ * Case-insensitive; false for "". `PROTEIN_ALPHABET` contains both nucleic-acid
+ * alphabets, so `isProtein("ACGT")` is true as well as `isDna("ACGT")`.
  *
  * @param s {string} the candidate sequence
  * @return {bool} true when non-empty and wholly within `PROTEIN_ALPHABET`

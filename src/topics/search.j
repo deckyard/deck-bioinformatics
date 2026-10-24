@@ -1,38 +1,27 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - search: finding things inside a sequence.
 # Spliced into bioinformatics.j via include - not a standalone module.
 #
-# Every offset reported here is 0-based and half-open, so `$s[$m.start..$m.end]`
-# is the match, and every offset is in the coordinates of the sequence the
-# caller passed in - including for features found on the reverse strand, which
-# are mapped back rather than reported in reverse-complement coordinates. That
-# mapping is the detail most easily got wrong, so it is tested directly.
+# Offsets are 0-based and half-open, in the coordinates of the sequence the
+# caller passed in, including for reverse-strand features (mapped back, and
+# tested directly).
 #
-# Matches overlap. `find("AAA", "AA")` reports two, not one: a tandem repeat and
-# a site inside another site are both real findings, and a non-overlapping scan
-# would silently drop the second. This is why the IUPAC matcher below walks the
-# sequence itself rather than delegating to `regex`, whose scan is
-# non-overlapping; `iupacClass` stays exported for callers composing their own
-# patterns.
+# Matches overlap: `find("AAA", "AA")` reports two. That is why the IUPAC
+# matcher walks the sequence itself instead of delegating to `regex`, whose
+# scan is non-overlapping.
 #
-# One Jennifer rule shapes the ORF scan below: arguments are passed by value, so
-# a helper cannot fill in a list handed to it - it would append to a copy. Every
-# helper here returns what it found and the caller concatenates.
+# Arguments are passed by value, so a helper cannot fill in a list handed to it.
+# Every helper here returns what it found and the caller concatenates.
 #
-# What this topic costs. An **exact** pattern - and that includes 67 of the 76
-# recognition sequences - is handed to `binary.indexOf`, which scans at native
-# speed: 200 kb in well under a millisecond. A **degenerate** pattern is
-# expanded into the concrete sequences it stands for and each of those goes the
-# same way, so `CCWGG` is two native scans rather than an interpreted walk.
-# Only a pattern too ambiguous to expand within `MAX_SITE_EXPANSION` falls back
-# to the interpreted scan, at roughly 3 microseconds a position.
-#
-# What remains is validation, which is interpreted and linear: normalising a
-# 200 kb sequence costs about half a second, and every public verb here does it
-# once. That is now the floor for this topic.
+# Cost: an exact pattern (67 of the 76 recognition sequences) goes to
+# `binary.indexOf`, 200 kb in well under a millisecond. A degenerate pattern is
+# expanded into its concrete sequences, each searched natively (`CCWGG` is two
+# scans); only one that expands past `MAX_SITE_EXPANSION` falls back to the
+# interpreted scan, about 3 microseconds a position. Validation is the floor:
+# normalising 200 kb costs about half a second, once per public call.
 
 /**
  * One place a pattern was found.
@@ -59,10 +48,8 @@ export def struct Match {
 /**
  * Find every occurrence of an exact subsequence.
  *
- * Overlapping occurrences are all reported. Searches the sequence as given;
- * reverse-complement the pattern, or the subject, to search the other strand.
- * Works on protein as well as nucleic acid - it is a residue search, not a
- * strand operation.
+ * Overlapping occurrences are all reported. Only the strand given is searched;
+ * reverse-complement the pattern to search the other. Works on protein too.
  *
  * @param s {string} the sequence to search
  * @param pattern {string} the subsequence to look for
@@ -81,11 +68,10 @@ export func find(s as string, pattern as string) {
 /**
  * Find every occurrence of an IUPAC pattern.
  *
- * The pattern may use ambiguity codes, so `GGWCC` matches both `GGACC` and
- * `GGTCC`, and `N` matches anything. The relation is one-way: a pattern's `N`
- * admits a subject's `A`, but a pattern's `A` does not admit a subject's `N`.
- *
- * Overlapping occurrences are all reported.
+ * The pattern may use ambiguity codes: `GGWCC` matches `GGACC` and `GGTCC`. The
+ * relation is one-way: a pattern's `N` admits a subject's `A`, a pattern's `A`
+ * does not admit a subject's `N`. `Match.text` is the concrete subsequence
+ * found. Overlapping occurrences are all reported.
  *
  * @param s {string} the nucleotide sequence to search
  * @param pattern {string} the pattern, in IUPAC codes
@@ -225,15 +211,15 @@ func iupacHitAt(hay as bytes, at as int, expansions as list of bytes, m as int) 
 /**
  * Find every place a pattern occurs with at most a given number of mismatches.
  *
- * The plain approximate search: no insertions or deletions, just substitutions,
- * which is what a primer-binding or probe-hybridisation question usually means.
- * Each match reports how many positions differed, so the exact hits sort to the
- * front. Use `editDistance` when indels matter.
+ * Substitutions only, no insertions or deletions. Each match carries its
+ * `mismatches` count; matches come in ascending order of `start`, exact and
+ * inexact together. Overlapping matches are all reported. Residues are compared
+ * literally (no IUPAC). Use `editDistance` when indels matter.
  *
  * @param s {string} the sequence to search
  * @param pattern {string} the subsequence to look for
  * @param maxMismatches {int} how many differing positions to tolerate
- * @return {list of Match} every occurrence within the tolerance
+ * @return {list of Match} every occurrence within the tolerance, by `start`
  * @throws {Error} kind "bioinformatics" when an argument is empty or holds a
  *         non-residue, the pattern is longer than the sequence, or the
  *         tolerance is negative
@@ -317,12 +303,11 @@ func requireFits(subject as string, needle as string) {
  * @field end {int} 0-based offset one past the last base, including the stop
  *        codon when there is one
  * @field length {int} bases spanned, `end` less `start`
- * @field nucleotides {string} the reading frame's own sequence, 5' to 3' as
- *        read - already reverse-complemented for a reverse-strand frame
+ * @field nucleotides {string} the frame's sequence 5' to 3' as read, DNA-spelled,
+ *        reverse-complemented for a reverse-strand frame
  * @field protein {string} the translation, without the trailing stop
- * @field stopped {bool} true when a stop codon terminated the frame; false when
- *        it ran off the end of the sequence, which for a fragment usually means
- *        the gene simply continues past what you have
+ * @field stopped {bool} true when a stop codon ended the frame, false when it ran
+ *        off the end of the sequence
  */
 export def struct Orf {
     frame as int,
@@ -340,7 +325,7 @@ export def struct Orf {
  *
  * @param nt {string} a DNA or RNA sequence
  * @param minAa {int} the shortest protein to report, in residues
- * @return {list of Orf} the frames found, forward strand first
+ * @return {list of Orf} frames 1, 2, 3, then -1, -2, -3
  * @throws {Error} kind "bioinformatics" when the sequence is empty or not a nucleic
  *         acid, or `minAa` is negative
  */
@@ -351,21 +336,18 @@ export func orfs(nt as string, minAa as int) {
 /**
  * Find open reading frames under a named genetic code.
  *
- * The genetic code is given by NCBI table id rather than as a codon map,
- * because an ORF search needs the table's **start codons** as well as its
- * assignments - and that is exactly what separates some tables. `BACTERIAL`
- * assigns every codon identically to `STANDARD` but recognises seven starts
- * rather than three, so the same sequence yields different ORFs under each.
+ * The code is an NCBI table id, not a codon map, because the search needs the
+ * table's start codons: `BACTERIAL` (11) assigns codons as `STANDARD` (1) does
+ * but has seven starts instead of three.
  *
- * Within a frame, scanning begins at the first start codon and runs to the
- * first in-frame stop; the next ORF begins at the next start codon after that
- * stop. So ORFs never overlap within a frame and each is the longest reading
- * from its region, rather than one report per nested start codon.
+ * Within a frame, an ORF begins at the first start codon and runs to the first
+ * in-frame stop; the next begins at the next start after that stop. ORFs never
+ * overlap within a frame, and nested start codons are not reported separately.
  *
  * @param nt {string} a DNA or RNA sequence
  * @param minAa {int} the shortest protein to report, in residues
  * @param tableId {int} an NCBI genetic code id
- * @return {list of Orf} the frames found, forward strand first
+ * @return {list of Orf} frames 1, 2, 3, then -1, -2, -3
  * @throws {Error} kind "bioinformatics" when the sequence is empty or not a nucleic
  *         acid, `minAa` is negative, or the table id is unknown
  * @example bioseq.orfsWith($genome, 50, 11)   # bacterial starts
@@ -536,19 +518,12 @@ export def struct Region {
 /**
  * Find CpG islands by the Gardiner-Garden and Frommer criteria.
  *
- * A CpG island is a stretch that is unusually rich in the dinucleotide `CG`.
- * That matters because CpG is otherwise scarce in vertebrate genomes -
- * methylated cytosine deaminates to thymine, so CpG has been eroded almost
- * everywhere except where methylation is kept off, which is exactly where
- * promoters sit.
- *
- * Three thresholds have to be met at once: the window must be long enough, GC
- * rich enough, and carry at least the given ratio of observed to expected CpG,
- * where expected is `(C count * G count) / length`. The classic values are a
- * 200-base window, 50% GC and a ratio of 0.6.
- *
- * Qualifying windows that touch or overlap are merged, and the statistics are
- * recomputed across each merged region rather than carried over from a window.
+ * A window qualifies when its GC percentage is at least `minGc` and its observed
+ * over expected CpG is at least `minObsExp`, expected being
+ * `(C count * G count) / length`. The classic values are 200, 50.0 and 0.6.
+ * Qualifying windows that touch or overlap are merged, and `gc` and `obsExp`
+ * are recomputed over each merged region. A sequence shorter than one window
+ * gives an empty list.
  *
  * @param s {string} a DNA sequence
  * @param window {int} the scanning window in bases; must be positive
@@ -707,7 +682,7 @@ func describeRegion(
  * @field start {int} 0-based offset of the first base of the recognition site
  * @field end {int} 0-based offset one past the site
  * @field cut {int} 0-based offset at which the top strand is cut
- * @field site {string} the sequence actually found, which for a degenerate
+ * @field site {string} the sequence found, which for a degenerate
  *        recognition sequence is the concrete match rather than the pattern
  * @field strand {int} +1, or -1 for a site found only on the reverse strand
  */
@@ -723,13 +698,14 @@ export def struct Site {
 /**
  * Find where the named enzymes cut a sequence.
  *
- * Every recognition sequence in the deck's table is palindromic, so a forward
- * scan finds every site; a non-palindromic site added later is searched on both
- * strands and reported with `strand: -1` where it is found only on the reverse.
+ * Every recognition sequence in the table is palindromic, so one forward scan
+ * finds every site. A non-palindromic site would also be searched on the reverse
+ * strand and reported with `strand: -1`. The sequence is treated as linear: a
+ * site spanning the origin of a circular sequence is not found.
  *
  * @param s {string} a DNA sequence
  * @param names {list of string} enzyme names, any case
- * @return {list of Site} every site, ordered by position then enzyme
+ * @return {list of Site} every site, ordered by `cut`, then enzyme name
  * @throws {Error} kind "bioinformatics" when the sequence is empty or not DNA, or an
  *         enzyme is not in the table
  * @example bioseq.restrictionSites($plasmid, ["EcoRI", "BamHI"])
@@ -775,16 +751,10 @@ func siteFrom(e as Enzyme, m as Match) {
 }
 
 /**
- * Order sites by cut position, then by enzyme name.
+ * Order sites by cut position, then by enzyme name, via `mergeSortSites`.
  *
- * An insertion sort, which suits the input: the sites arrive already grouped in
- * ascending order per enzyme, so most insertions land near the end and the scan
- * is short.
- *
- * It shifts in place rather than rebuilding. The first version of this built a
- * fresh list on every insertion, which made the whole sort quadratic *in list
- * copies* rather than in comparisons - a digest of an 8 kb sequence with the
- * full enzyme table spent about four seconds here alone.
+ * An earlier insertion sort rebuilt the list on every insertion; an 8 kb digest
+ * with the full enzyme table spent about four seconds in it.
  *
  * @param sites {list of Site} the sites to order
  * @return {list of Site} the same sites, ordered
@@ -801,8 +771,7 @@ func sortSites(sites as list of Site) {
  * Merge sort over sites, so ordering stays O(n log n) in the number of sites.
  *
  * A digest of a long sequence with the whole enzyme table produces thousands of
- * them, and the insertion sort this replaced was quadratic - it dominated the
- * digest once the scanning itself had been made native.
+ * sites; the quadratic insertion sort this replaced dominated the digest.
  *
  * @param sites {list of Site} the sites to order
  * @return {list of Site} the same sites, ordered
@@ -876,13 +845,13 @@ func sitePrecedes(a as Site, b as Site) {
 }
 
 /**
- * Which of the deck's enzymes cut this sequence at all?
+ * The enzymes in the table that have at least one site in the sequence.
  *
- * The first question asked of an unfamiliar insert, and the cheap way to find a
- * usable cloning site.
+ * Faster than `restrictionSites` over the whole table: it stops at the first
+ * site of each enzyme.
  *
  * @param s {string} a DNA sequence
- * @return {list of string} the names of every enzyme with at least one site
+ * @return {list of string} enzyme names, alphabetical
  * @throws {Error} kind "bioinformatics" when the sequence is empty or not DNA
  */
 export func enzymesCutting(s as string) {
@@ -1041,13 +1010,11 @@ func anchorByte(expansion as bytes) {
 }
 
 /**
- * Which of the deck's enzymes leave this sequence untouched?
- *
- * The complement of `enzymesCutting`, and the more useful of the two when the
- * job is to linearise a construct exactly once or to leave an insert intact.
+ * The enzymes in the table with no site in the sequence: the complement of
+ * `enzymesCutting`.
  *
  * @param s {string} a DNA sequence
- * @return {list of string} the names of every enzyme with no site
+ * @return {list of string} enzyme names, alphabetical
  * @throws {Error} kind "bioinformatics" when the sequence is empty or not DNA
  */
 export func nonCutters(s as string) {
@@ -1072,7 +1039,7 @@ export func nonCutters(s as string) {
  * @field start {int} 0-based offset of the fragment's first base in the
  *        original sequence
  * @field end {int} 0-based offset one past its last base; for the fragment that
- *        wraps the origin of a circular sequence this is less than `start`
+ *        wraps the origin of a circular sequence this is at most `start`
  * @field length {int} the fragment's length in bases
  * @field sequence {string} the fragment itself
  */
@@ -1086,16 +1053,16 @@ export def struct Fragment {
 /**
  * Cut a sequence with the named enzymes and return the pieces.
  *
- * Cuts are taken on the top strand at each enzyme's `cutTop` offset, which is
- * what determines fragment sizes on a gel; the staggered cut on the bottom
- * strand decides the ends' chemistry, not the lengths, and is reported through
- * `Enzyme.overhang` instead.
+ * Cuts are made on the top strand at each enzyme's `cutTop` offset; the bottom
+ * strand's stagger is described by `Enzyme.overhang`, not reflected in the
+ * lengths. Coinciding cuts count once, and a cut at offset 0 or at the end is
+ * ignored. Sites are found as by `restrictionSites`, so on a circular sequence a
+ * site spanning the origin is missed.
  *
- * A **linear** sequence with no site yields one fragment - the whole thing. A
- * **circular** one with no site also yields one fragment, still circular; with
- * one site it yields one linear fragment of the full length, which is exactly
- * what linearising a plasmid does. With more, the fragment spanning the origin
- * wraps, and is the one whose `end` is less than its `start`.
+ * Linear: no site gives the whole sequence, n cuts give n + 1 fragments.
+ * Circular: no site gives one fragment `0..len`; n cuts give n fragments, the
+ * last running from the last cut through the origin, so its `end` is not greater
+ * than its `start` (equal when there is one cut, the linearised plasmid).
  *
  * @param s {string} a DNA sequence
  * @param names {list of string} enzyme names, any case

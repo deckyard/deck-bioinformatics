@@ -1,60 +1,44 @@
 # Manipulation
 
-Generating, shuffling, mutating and slicing.
-
-Runnable version: `jennifer run examples/manipulate.j`.
-
-## What these are for
-
-Null models. A motif that looks striking in a real sequence has to be compared
-against something, and the honest comparison is sequence with the same
-composition and no structure. That is what `shuffle` produces and what
-`randomDnaWith` approximates.
+Runnable: `jennifer run examples/manipulate.j`, which uses these verbs to build
+null models.
 
 ## Reproducibility
 
-The random verbs draw from `math.rand`, so a single `math.randSeed` governs the
-whole run:
+The random verbs draw from `math.rand`; the deck keeps no generator of its own.
+One `math.randSeed` makes the whole program reproducible:
 
 ```jennifer
 math.randSeed(20260828);
-bioseq.randomDna(40);   # the same sequence every time
+bioseq.randomDna(40);   # the same sequence every run
 ```
-
-The deck keeps no generator of its own, deliberately: one seed for the program is
-easier to reason about than a hidden second stream.
 
 ## Generating
 
 ```jennifer
-bioseq.randomDna(40);
-bioseq.randomRna(40);
-bioseq.randomProtein(40);
+bioseq.randomDna(40);       # uniform over DNA_BASES, "ACGT"
+bioseq.randomRna(40);       # RNA_BASES, "ACGU"
+bioseq.randomProtein(40);   # STANDARD_RESIDUES, the twenty
 ```
 
-Uniform over the alphabet. The alphabets are `DNA_BASES` (`ACGT`), `RNA_BASES`
-(`ACGU`) and `STANDARD_RESIDUES` (the twenty). Ambiguity codes are excluded: a
-generator emitting `N` would be producing missing data, not sequence.
+Ambiguity codes are never generated. The length must be positive; there is no
+upper bound, so `randomDna(2000000000)` tries to allocate two gigabytes.
 
 ### With a composition
 
 ```jennifer
 bioseq.randomDnaWith(100, {"A": 35.0, "T": 35.0, "C": 15.0, "G": 15.0});
+bioseq.randomDnaWith(40, {"A": 1.0, "G": 1.0});   # purines only
 ```
 
-Weights are **relative, not percentages** - they are normalised - so
-`{"A": 3.0, "T": 1.0}` and `{"A": 75.0, "T": 25.0}` describe the same
-distribution. A residue left out of the map never appears, which is how to
-generate a purine-only sequence:
+Weights are relative and normalised: `{"A": 3.0, "T": 1.0}` and
+`{"A": 75.0, "T": 25.0}` are the same distribution. A residue left out (or
+weighted 0) never appears. A key outside the generator's alphabet, a negative
+weight, or all-zero weights raise. `randomRnaWith` and `randomProteinWith` work
+the same way.
 
-```jennifer
-bioseq.randomDnaWith(40, {"A": 1.0, "G": 1.0});
-```
-
-A uniform random protein is not what a real one looks like - residue frequencies
-in nature are far from flat. Pair `randomProteinWith` with
-[`residueFrequency`](composition.md#composition) on a real protein when the null
-model needs to be realistic:
+Real proteins are far from uniform. For a realistic null model, take the
+composition of a real one:
 
 ```jennifer
 def composition as map of string to float init bioseq.residueFrequency($real);
@@ -67,15 +51,10 @@ bioseq.randomProteinWith(len($real), $composition);
 bioseq.shuffle($sequence);
 ```
 
-A Fisher-Yates shuffle: every permutation equally likely, and the residue counts
-unchanged by construction. `baseCount(shuffle(s))` always equals
-`baseCount(s)`, and so does anything derived from composition alone - GC
-content, molecular weight, GRAVY.
-
-This is the honest null model for *is this motif surprising?* A random sequence
-of the same length answers a weaker question, because it differs from the real
-one in composition as well as order. A shuffle differs only in order, which is
-usually the hypothesis being tested:
+Fisher-Yates: every permutation equally likely, residue counts unchanged, so
+`baseCount`, GC content, molecular weight and GRAVY are unchanged too. A
+shuffle differs from the original only in order, which makes it the null model
+for "is this motif surprising?":
 
 ```jennifer
 def trials as int init 500;
@@ -85,8 +64,7 @@ for (def i as int init 0; $i < $trials; $i = $i + 1) {
         $withSite = $withSite + 1;
     }
 }
-# of 500 shuffles with identical composition, 15 carried a site:
-# a site like this arises by chance about 3% of the time
+# examples/manipulate.j: 15 of 500 shuffles carried a site, about 3%
 ```
 
 ## Mutating
@@ -95,30 +73,23 @@ for (def i as int init 0; $i < $trials; $i = $i + 1) {
 bioseq.mutate($gene, 0.01, bioseq.DNA);
 ```
 
-Substitutions only - no insertions or deletions - at a per-position probability.
-The number of changes varies between calls: at rate 0.1 a hundred-base sequence
-takes about ten substitutions, not exactly ten.
-
-**A mutated position always changes.** If a substitution could redraw the
-original residue, the realised rate would come out lower than the one asked for,
-so the draw is taken from the alphabet less the current residue.
-
-The `kind` argument decides which alphabet substitutions come from: the four
-bases for `DNA` and `RNA`, the twenty standard residues for `PROTEIN`.
+Substitutions only, each position with probability `rate` (0 to 1), so the
+number of changes varies between calls: at 0.1 a 100-base sequence gets about
+ten. A mutated position always changes: the replacement is drawn from the
+alphabet minus the current residue, so the realised rate matches `rate`. `kind`
+selects that alphabet: `DNA_BASES`, `RNA_BASES` or `STANDARD_RESIDUES`.
 
 ## Extracting
 
 ### `subrange`
 
 ```jennifer
-bioseq.subrange($gene, 13, 24);   # "bases 13 to 24"
+bioseq.subrange($gene, 13, 24);   # bases 13 to 24
+$gene[12..24];                    # the same
 ```
 
-**This is the deck's one 1-based inclusive verb**, and it is named for it.
-Everything else is 0-based and half-open, matching Jennifer's own slicing - but
-biology quotes positions 1-based inclusive everywhere, so a paper saying
-"residues 25 to 40" transcribes directly. The equivalent native slice is
-`$gene[12..24]`.
+The deck's one 1-based, inclusive verb, so positions quoted in a paper
+transcribe directly. Out-of-range or backwards ranges raise.
 
 ### `windows`
 
@@ -126,19 +97,7 @@ biology quotes positions 1-based inclusive everywhere, so a paper saying
 bioseq.windows($gene, 24, 12);   # list of string
 ```
 
-Overlapping windows, advancing by `step`. The last partial window is dropped, so
-every window is exactly `size` long and the series stays comparable - the same
-rule [`gcWindows`](composition.md#along-the-sequence) follows, and the two cut a
-sequence identically.
-
-## The surface
-
-| | |
-| - | - |
-| `randomDna(n)` / `randomRna(n)` / `randomProtein(n)` | uniform |
-| `randomDnaWith(n, weights)` / `randomRnaWith` / `randomProteinWith` | weighted |
-| `shuffle(s)` | composition-preserving |
-| `mutate(s, rate, kind)` | point substitutions |
-| `subrange(s, from, through)` | **1-based inclusive** |
-| `windows(s, size, step)` | → `list of string` |
-| `DNA_BASES`, `RNA_BASES`, `STANDARD_RESIDUES` | the generator alphabets |
+A window of `size` residues every `step`; they overlap when `step < size`. The
+last partial window is dropped, as in
+[`gcWindows`](composition.md#gc-content), so the two cut a sequence
+identically. A sequence shorter than one window raises.

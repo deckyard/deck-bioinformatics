@@ -1,63 +1,29 @@
 # Transforms
 
-Turning one sequence into another: the other strand, the other alphabet, the
-protein it encodes.
+Runnable: `jennifer run examples/transforms.j`.
 
-Runnable version of everything here: `jennifer run examples/transforms.j`.
-
-## The two strands
+## Strands
 
 ```jennifer
-bioseq.complement("ATGC");          # "TACG"
-bioseq.reverseComplement("ATGC");   # "GCAT"
+bioseq.complement("ATGC");          # "TACG" - reads 3' to 5'
+bioseq.reverseComplement("ATGC");   # "GCAT" - the other strand, 5' to 3'
 bioseq.reverse("ATGC");             # "CGTA"
 ```
 
-`complement` pairs the bases and leaves them where they are, which means the
-result reads 3′-to-5′ - almost never what you want on its own.
-`reverseComplement` is the strand you would actually write down, and applying it
-twice returns the original:
+`reverseComplement` applied twice returns the original, and equals
+`reverse(complement(s))`. `reverse` works on protein too.
 
-```jennifer
-bioseq.reverseComplement(bioseq.reverseComplement($gene)) == $gene;   # true
-```
-
-`reverse` is a residue operation rather than a strand operation, so it works on
-protein too. It exists mostly because `reverseComplement` decomposes into it:
-
-```jennifer
-bioseq.reverseComplement($s) == bioseq.reverse(bioseq.complement($s));   # true
-```
-
-### Alphabet and ambiguity
-
-The alphabet is preserved. A sequence spelled with `U` complements with `U`; one
-spelled with neither `T` nor `U` is read as DNA, which is what every tool does:
+The alphabet is preserved: a sequence containing `U` complements with `U`; one
+with neither `T` nor `U` is DNA. Ambiguity codes complement as sets (`R` = A/G
+becomes `Y` = C/T); `S`, `W` and `N` are their own complements. A sequence
+holding both `T` and `U` raises.
 
 ```jennifer
 bioseq.complement("AUGC");     # "UACG"
 bioseq.complement("ACGACG");   # "TGCTGC"
-```
-
-Ambiguity codes complement as sets - `R` is A-or-G, so it becomes `Y`, which is
-C-or-T - and the self-complementary codes are fixed points:
-
-```jennifer
 bioseq.complement("RYSWKM");   # "YRSWMK"
 bioseq.complement("BDHV");     # "VHDB"
 bioseq.complement("SWN");      # "SWN"
-```
-
-A sequence carrying both `T` and `U` has no alphabet, and rather than pick one,
-the deck raises.
-
-### Palindromes
-
-A sequence that is its own reverse complement is what a type II restriction
-enzyme recognises, because the enzyme binds as a homodimer:
-
-```jennifer
-bioseq.reverseComplement("GAATTC") == "GAATTC";   # true - EcoRI
 ```
 
 ## Transcription
@@ -67,10 +33,8 @@ bioseq.transcribe("ATGC");       # "AUGC"
 bioseq.backTranscribe("AUGC");   # "ATGC"
 ```
 
-This is the coding-strand shorthand, not the biological event: nothing is
-complemented, because an mRNA matches the coding strand and only the thymines
-are spelled differently. Each verb insists on its own input alphabet, so
-`transcribe` on RNA raises rather than silently doing nothing.
+Coding-strand convention: `T` and `U` are swapped and nothing is complemented.
+`transcribe` requires DNA and `backTranscribe` RNA; the wrong one raises.
 
 ## Translation
 
@@ -78,39 +42,25 @@ are spelled differently. Each verb insists on its own input alphabet, so
 bioseq.translate("ATGACGTTACATGGATAA");   # "MTLHG*"
 ```
 
-RNA is accepted directly - `U` is read as `T` for the codon lookup - so the two
-spellings of one gene give the same protein.
-
-Three behaviours are worth knowing:
-
-**A trailing partial codon is dropped.** One or two leftover bases cannot form a
-codon, so `translate("ATGAC")` is `"M"`.
-
-**A stop is reported, not obeyed.** Translation reads the whole sequence and
-emits `*` at each stop rather than halting, because an ORF search needs to see
-where all of them fall:
+- RNA is accepted; `U` is read as `T`.
+- A trailing one or two bases are dropped: `translate("ATGAC")` is `"M"`.
+- A stop becomes `*` and translation continues: `translate("ATGTAAATG")` is
+  `"M*M"`.
+- A codon with an ambiguity code gives the residue all its expansions agree on,
+  otherwise `X`:
 
 ```jennifer
-bioseq.translate("ATGTAAATG");   # "M*M"
-```
-
-**Ambiguity resolves when it can.** A codon holding an ambiguity code is
-expanded, and if every codon it admits gives the same residue, that residue is
-the answer - the ambiguity is real but the translation is not ambiguous:
-
-```jennifer
-bioseq.translate("CGN");   # "R" - every CGN codon is arginine
+bioseq.translate("CGN");   # "R"
 bioseq.translate("GGN");   # "G"
 bioseq.translate("TTY");   # "F"
-bioseq.translate("ATN");   # "X" - genuinely could be I or M
+bioseq.translate("ATN");   # "X" - I or M
 bioseq.translate("NNN");   # "X"
 ```
 
 ### Other genetic codes
 
-`translateWith` takes a codon table. This matters more often than it looks: a
-mitochondrial gene read under the standard code stops early at every `TGA`, and
-a ciliate gene never stops at all.
+`translateWith` takes a codon table. The nine tables are listed in
+[Genetic codes](tables.md#genetic-codes).
 
 ```jennifer
 bioseq.translate("TGA");                                        # "*"
@@ -118,27 +68,24 @@ bioseq.translateWith("TGA", bioseq.VERTEBRATE_MITOCHONDRIAL);   # "W"
 bioseq.translateWith("TAATAG", bioseq.CILIATE_NUCLEAR);         # "QQ"
 ```
 
-The nine tables the deck carries are listed in
-[Genetic codes and residues](tables.md).
-
-Note the naming pattern, which recurs across the deck: `translate` is the common
-call, and `translateWith` exists for the case where an alternative table is the
-actual point. It is not a performance device - see
-[Design notes](design.md#tables-are-read-not-passed).
+A `With` suffix always means an explicit alternative to a default (Jennifer has
+no default arguments), never a performance option.
 
 ## Reading frames
 
-Frames `1`, `2` and `3` start at the first, second and third base of the forward
-strand. Frames `-1`, `-2` and `-3` do the same on the reverse complement, so
-frame `-1` starts at the last base and reads back.
+Frames `1`, `2`, `3` start at the first, second and third base. Frames `-1`,
+`-2`, `-3` do the same on the reverse complement, so frame `-1` starts at the
+last base. A frame starting past the end translates to `""`; any other frame
+number raises.
 
 ```jennifer
 bioseq.translateFrame($gene, 2);
 bioseq.translateFrame($gene, -1) == bioseq.translate(bioseq.reverseComplement($gene));  # true
+bioseq.translateFrameWith($mito, 1, bioseq.VERTEBRATE_MITOCHONDRIAL);
 ```
 
-`sixFrame` returns all six as `Frame{frame, protein}` records, in the order
-`1, 2, 3, -1, -2, -3`:
+`sixFrame` (and `sixFrameWith`, which takes a table) returns six `Frame`
+records in the order `1, 2, 3, -1, -2, -3`:
 
 ```jennifer
 for (def f in bioseq.sixFrame($gene)) {
@@ -146,13 +93,9 @@ for (def f in bioseq.sixFrame($gene)) {
 }
 ```
 
-This is what you read when a sequence's frame is unknown - a raw read, a contig,
-an unannotated region - looking for the frame without stops. For the same job
-with start and stop codons taken into account, use
-[`orfs`](search.md#open-reading-frames).
-
-`sixFrameWith` and `translateFrameWith` take a codon table, the same way
-`translateWith` does.
+For start and stop codons, use [`orfs`](search.md#open-reading-frames).
+`splitCodons` returns the codons in reading order, dropping a trailing partial
+codon.
 
 ## Residue spellings
 
@@ -160,31 +103,13 @@ with start and stop codons taken into account, use
 bioseq.oneToThree("MKV");         # "MetLysVal"
 bioseq.threeToOne("Met-Lys-Val"); # "MKV"
 bioseq.threeToOne("MetLysVal");   # "MKV"
+bioseq.oneToThree("*");           # "Ter"
+bioseq.oneToThree("X");           # "Xaa"
+bioseq.oneToThree("BZJ");         # "AsxGlxXle"
 ```
 
-Codes may be run together or separated by spaces or hyphens, which is how they
-are written in prose. The ambiguity codes and the stop symbol have three-letter
-spellings too, so anything `translate` produces can be rewritten and read back:
+`threeToOne` accepts codes run together or separated by spaces or hyphens.
+Ambiguity codes and the stop have three-letter spellings (`THREE_LETTER`), so
+any `translate` output round-trips.
 
-```jennifer
-bioseq.oneToThree("*");     # "Ter"
-bioseq.oneToThree("X");     # "Xaa"
-bioseq.oneToThree("BZJ");   # "AsxGlxXle"
-```
-
-## The surface
-
-| | |
-| - | - |
-| `complement(s)` | pair each base, keep the order |
-| `reverseComplement(s)` | the other strand, read 5′ to 3′ |
-| `reverse(s)` | reverse the residues, any sequence |
-| `transcribe(dna)` / `backTranscribe(rna)` | T ↔ U |
-| `translate(nt)` | under the standard code |
-| `translateWith(nt, table)` | under a named code |
-| `translateFrame(nt, frame)` | one of the six frames |
-| `translateFrameWith(nt, frame, table)` | |
-| `sixFrame(nt)` → `list of Frame` | all six |
-| `sixFrameWith(nt, table)` | |
-| `splitCodons(nt)` → `list of string` | three-base codons in reading order |
-| `oneToThree(p)` / `threeToOne(p)` | residue spellings |
+Signatures: [cheatsheet](cheatsheet.md#transforms).

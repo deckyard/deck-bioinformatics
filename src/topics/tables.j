@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - tables: lookup over the reference data.
@@ -14,9 +14,8 @@
 /**
  * Look a genetic code up by its NCBI `transl_table` number.
  *
- * The named constants (`STANDARD`, `VERTEBRATE_MITOCHONDRIAL`, ...) are the
- * direct way to reach a table; this is the indirect one, for code that carries
- * a table number around rather than a choice made at authoring time.
+ * For a table id carried in data; the named constants (`STANDARD`, ...) are
+ * the same maps.
  *
  * @param id {int} an NCBI genetic code id, one of `codonTableIds()`
  * @return {map of string to string} codon -> one-letter residue, stop as `*`
@@ -73,10 +72,9 @@ export func codonTableName(id as int) {
 /**
  * Every genetic code this deck carries, in ascending NCBI order.
  *
- * The numbering has gaps - 7 and 8 were retired - so this is the list to walk
- * rather than a range.
+ * The numbering has gaps (7 and 8 were retired): walk this list, not a range.
  *
- * @return {list of int} the supported `transl_table` numbers
+ * @return {list of int} 1, 2, 3, 4, 5, 6, 9, 10, 11
  */
 export func codonTableIds() {
     def ids as list of int;
@@ -89,10 +87,8 @@ export func codonTableIds() {
 /**
  * The codons that may initiate translation under a given genetic code.
  *
- * This is what separates several tables that agree on every codon assignment:
- * `BACTERIAL` reads identically to `STANDARD` but recognises seven starts
- * rather than three, which is why an ORF search takes a table id and not just
- * a codon map.
+ * `BACTERIAL` (11) assigns codons as `STANDARD` (1) does but has seven starts
+ * instead of three, which is why `orfsWith` takes a table id.
  *
  * @param id {int} an NCBI genetic code id
  * @return {list of string} the start codons
@@ -131,9 +127,8 @@ export func expandIupac(code as string) {
 /**
  * Render an IUPAC code as a regular-expression character class.
  *
- * This is how the ambiguity-aware search in `findIupac` is built: an IUPAC
- * pattern becomes a character class per position, which `regex` then matches in
- * linear time.
+ * For callers composing their own `regex` patterns. `findIupac` does not use
+ * it: a regex scan does not report overlapping matches.
  *
  * @param code {string} one IUPAC nucleotide character, any case
  * @return {string} a bracketed class, e.g. "[AG]" for `R`
@@ -146,8 +141,8 @@ export func iupacClass(code as string) {
 /**
  * Does an IUPAC code admit a given base?
  *
- * The relation is one-way on purpose: `N` admits `A`, but `A` does not admit
- * `N`. Ask with the pattern code first and the observed base second.
+ * One-way: `N` admits `A`, `A` does not admit `N`. Pattern code first, observed
+ * base second.
  *
  * @param code {string} the IUPAC code from a pattern
  * @param base {string} the observed base
@@ -169,10 +164,9 @@ export func matchesIupac(code as string, base as string) {
 /**
  * Look up a residue's identity, mass and properties.
  *
- * Takes either spelling - `aminoAcid("K")` and `aminoAcid("Lys")` are the same
- * lookup. The ambiguity codes `B`, `Z`, `X` and `J` are deliberately absent:
- * they have no single mass or pKa, so a caller that means one of them has to
- * decide what it means rather than receive a plausible wrong number.
+ * `aminoAcid("K")` and `aminoAcid("Lys")` are the same lookup. The ambiguity
+ * codes `B`, `Z`, `X` and `J` and the stop `*` are absent: they have no single
+ * mass or pKa.
  *
  * @param code {string} a one- or three-letter residue code, any case
  * @return {AminoAcid} the residue record
@@ -197,8 +191,8 @@ export func aminoAcid(code as string) {
 /**
  * Every residue this deck carries properties for.
  *
- * The standard twenty in the conventional one-letter order, followed by
- * selenocysteine and pyrrolysine.
+ * 22 records: the standard twenty in three-letter alphabetical order
+ * (`ARNDCEQGHILKMFPSTWYV`), then selenocysteine (`U`) and pyrrolysine (`O`).
  *
  * @return {list of AminoAcid} the residue records
  */
@@ -213,8 +207,8 @@ export func aminoAcids() {
 /**
  * Is this a residue the deck carries properties for?
  *
- * The cheap guard in front of `aminoAcid` for a caller walking a sequence that
- * may contain ambiguity codes.
+ * The guard in front of `aminoAcid` for a sequence that may contain ambiguity
+ * codes.
  *
  * @param code {string} a one- or three-letter residue code, any case
  * @return {bool} true when `aminoAcid` would succeed

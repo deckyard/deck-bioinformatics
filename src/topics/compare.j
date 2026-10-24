@@ -1,45 +1,30 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - compare: pairwise alignment and distance.
 # Spliced into bioinformatics.j via include - not a standalone module.
 #
-# This is the deck's one O(n*m) surface. The dynamic-programming matrix is a
-# flat `list of int` indexed `i * width + j` rather than a list of lists, and the
-# substitution scores for the two sequences are precomputed once into a map
-# keyed by the two bytes - so the inner loop is a handful of indexed reads and a
-# single lookup, with no string built and no helper called per cell.
+# The deck's one O(n*m) surface. The DP matrix is a flat `list of int` indexed
+# `i * width + j`, and the substitution scores for the two sequences are
+# precomputed into a map keyed by the two bytes, so the inner loop builds no
+# string and calls no helper.
 #
-# Two ceilings, both measured (examples/bench.j reproduces the timings).
+# Measured (examples/bench.j): about 70 000 cells a second; 200 x 200 under half
+# a second, 400 x 400 a little over two. Memory binds first: about one kilobyte
+# per cell, because every entry is a boxed interpreter value. 700 x 700 measured
+# 570 MB resident, so 1000 x 1000 is about a gigabyte and 2000 x 2000 an
+# out-of-memory kill. Hence `AlignOptions.maxCells`, on by default. Whole-genome
+# throughput is out of scope.
 #
-# Time: about 70 000 cells a second, quadratic in sequence length. 200 x 200
-# takes under half a second, 400 x 400 a little over two.
-#
-# Memory, which binds first and binds hard: about **one kilobyte per cell**,
-# because every matrix entry is a boxed interpreter value. 700 x 700 measured
-# 570 MB resident. So 1000 x 1000 is roughly a gigabyte and 2000 x 2000 is not
-# a wait but an out-of-memory kill.
-#
-# That is why `AlignOptions.maxCells` exists and why it is set by default: an
-# alignment of two untrusted sequences would otherwise be a reliable way to
-# take the process down. A chromosome is not a question this deck answers - the
-# milestone puts whole-genome throughput out of scope and leaves a Go primitive
-# as a later question.
-#
-# Gap scoring is linear: every gap position costs the same. Affine gaps (a
-# larger penalty to open than to extend, which models indels better) are the
-# obvious next step and are deliberately not in this release.
+# Gap scoring is linear; affine gaps are not implemented.
 
 /**
- * The largest dynamic-programming matrix an alignment will build by default -
- * one million cells, so a thousand residues against a thousand.
+ * The default `AlignOptions.maxCells`: the largest DP matrix an alignment builds.
  *
- * At the measured cost of roughly a kilobyte per cell that is about a gigabyte
- * of resident memory, which is already a great deal to allocate by surprise.
- * The limit is a field on `AlignOptions` rather than a hard constant, so a
- * caller who has the memory and means it can raise it - but the decision is
- * then explicit rather than accidental.
+ * The matrix has `(len(a) + 1) * (len(b) + 1)` cells, so 999 x 999 residues is
+ * the largest square alignment under this limit. At about a kilobyte per cell
+ * that is about a gigabyte resident.
  */
 export def const DEFAULT_MAX_ALIGNMENT_CELLS as int init 1000000;
 
@@ -49,13 +34,12 @@ export def const DEFAULT_MAX_ALIGNMENT_CELLS as int init 1000000;
  * @field matchScore {int} score for identical residues, used when `matrix` is
  *        empty
  * @field mismatchScore {int} score for differing residues, likewise
- * @field gapScore {int} score for one gap position - negative, being a penalty
+ * @field gapScore {int} score for one gap position, normally negative
  * @field matrix {map of string to int} a substitution matrix such as
  *        `BLOSUM62`; when non-empty it replaces `matchScore` and
  *        `mismatchScore` entirely
- * @field maxCells {int} refuse an alignment whose matrix would exceed this many
- *        cells; 0 removes the limit. Guards against an alignment of two large
- *        sequences exhausting memory - see `DEFAULT_MAX_ALIGNMENT_CELLS`
+ * @field maxCells {int} largest DP matrix to build, `(len(a) + 1) * (len(b) + 1)`
+ *        cells; 0 or less removes the limit (about 1 KB per cell)
  */
 export def struct AlignOptions {
     matchScore as int,
@@ -66,11 +50,8 @@ export def struct AlignOptions {
 };
 
 /**
- * Sensible defaults for aligning DNA or RNA.
- *
- * `+2` for a match, `-1` for a mismatch, `-2` per gap position - the ratio
- * EMBOSS and BLASTN use for nucleotide work. No substitution matrix: for four
- * bases a match/mismatch pair says everything a matrix would.
+ * Scoring for DNA or RNA: +2 match, -1 mismatch, -2 per gap position, no matrix,
+ * `maxCells` = `DEFAULT_MAX_ALIGNMENT_CELLS`.
  *
  * @return {AlignOptions} the defaults
  */
@@ -86,13 +67,9 @@ export func dnaOptions() {
 }
 
 /**
- * Sensible defaults for aligning protein: BLOSUM62 with a gap penalty of -8.
- *
- * A matrix matters far more for protein than for DNA. Leucine against
- * isoleucine is a conservative substitution that barely changes a protein;
- * leucine against aspartate is not. A match/mismatch score cannot express that,
- * and BLOSUM62 does - which is why it is the default here and why
- * `percentSimilarity` has anything to report.
+ * Scoring for protein: `BLOSUM62`, -8 per gap position,
+ * `maxCells` = `DEFAULT_MAX_ALIGNMENT_CELLS`. `matchScore` and `mismatchScore`
+ * are set to 1 and -1 but unused while the matrix is present.
  *
  * @return {AlignOptions} the defaults
  */
@@ -109,10 +86,9 @@ export func proteinOptions() {
 /**
  * Look one residue pair up in a substitution matrix.
  *
- * A substitution matrix is symmetric, so the deck stores only one order of each
- * pair; this tries both. An unknown pair - a residue the matrix does not cover -
- * scores as the matrix's own mismatch floor rather than raising, so an
- * alignment carrying an odd character still completes.
+ * Tries `a + b`, then `b + a`, because `BLOSUM62` stores one order of each pair.
+ * A pair the matrix does not cover scores the matrix's `XX` entry (-1 in
+ * `BLOSUM62`), or 0 if it has none; it does not raise.
  *
  * @param matrix {map of string to int} the matrix, e.g. `BLOSUM62`
  * @param a {string} one residue
@@ -140,16 +116,15 @@ export func substitutionScore(matrix as map of string to int, a as string, b as 
  *
  * @field a {string} the first sequence with gaps inserted, as aligned
  * @field b {string} the second, the same length as `a`
- * @field markup {string} one character per column: `|` where the residues are
- *        identical, `:` where they differ but score positively - a conservative
- *        substitution - and a space otherwise
+ * @field markup {string} one character per column: `|` identical, `:` different
+ *        but scoring positively, space otherwise (gaps included)
  * @field score {int} the alignment's total score under the options used
  * @field length {int} columns in the alignment, gaps included
  * @field identities {int} columns where the residues are identical
  * @field similarities {int} columns scoring positively, identities included
  * @field gaps {int} columns holding a gap in one sequence or the other
  * @field startA {int} 0-based offset in the first sequence where the alignment
- *        begins - always 0 for a global alignment
+ *        begins, 0 for a global alignment
  * @field startB {int} the same for the second sequence
  */
 export def struct Alignment {
@@ -168,18 +143,16 @@ export def struct Alignment {
 /**
  * Align two sequences end to end - the Needleman-Wunsch algorithm.
  *
- * Every residue of both sequences appears in the result, padded with gaps. This
- * is the right question for two sequences believed to be homologous over their
- * whole length: two versions of the same gene, or the same protein from two
- * species. It is the wrong question for a short sequence against a long one,
- * where the terminal gaps dominate the score - use `alignLocal` for that.
+ * Every residue of both sequences appears in the result. Terminal gaps are
+ * penalised like any other, so for a short sequence against a long one use
+ * `alignLocal`.
  *
  * @param a {string} the first sequence
  * @param b {string} the second sequence
  * @param opts {AlignOptions} scoring, from `dnaOptions` or `proteinOptions`
  * @return {Alignment} the alignment
  * @throws {Error} kind "bioinformatics" when either sequence is empty or holds a
- *         non-residue
+ *         non-residue, or the matrix would exceed `opts.maxCells`
  * @see Needleman SB, Wunsch CD (1970) J Mol Biol 48:443-453
  * @example bioseq.alignGlobal($one, $other, bioseq.dnaOptions())
  */
@@ -191,19 +164,18 @@ export func alignGlobal(a as string, b as string, opts as AlignOptions) {
  * Find the best-matching stretch within two sequences - the Smith-Waterman
  * algorithm.
  *
- * Differs from the global version in three small ways with one large
- * consequence: no cell may score below zero, the traceback starts at the
- * highest-scoring cell rather than the corner, and it stops at the first zero.
- * The result is the single best local match, with everything outside it
- * discarded - which is what finds a shared domain inside two otherwise
- * unrelated proteins.
+ * No cell scores below zero, the traceback starts at the highest-scoring cell
+ * and stops at the first zero. The result is the single best local match;
+ * `startA` and `startB` locate it. Boundaries are soft: with +2/-1 scoring,
+ * random flanking sequence still scores above zero on average, so the span can
+ * reach past the region of interest.
  *
  * @param a {string} the first sequence
  * @param b {string} the second sequence
  * @param opts {AlignOptions} scoring, from `dnaOptions` or `proteinOptions`
  * @return {Alignment} the best local alignment
  * @throws {Error} kind "bioinformatics" when either sequence is empty or holds a
- *         non-residue
+ *         non-residue, or the matrix would exceed `opts.maxCells`
  * @see Smith TF, Waterman MS (1981) J Mol Biol 147:195-197
  */
 export func alignLocal(a as string, b as string, opts as AlignOptions) {
@@ -295,8 +267,6 @@ func align(a as string, b as string, opts as AlignOptions, local as bool) {
  * trying and being killed lets a caller fall back - to a local alignment on a
  * windowed region, or to a distance instead.
  *
- * @param n {int} length of the first sequence
- * @param m {int} length of the second
  * Passing 0 removes the ceiling entirely. That is deliberate - a caller who has
  * the memory and means it should not be overruled by the library - but it is
  * the one way to make this deck exhaust the host's memory, and two sequences of
@@ -493,10 +463,9 @@ func reverseBytes(buf as bytes) {
 /**
  * The percentage of aligned columns holding identical residues.
  *
- * The figure quoted as "85% identical". Note that it is measured over the
- * alignment's own length, gaps included - so a global alignment of two
- * sequences of very different lengths reports a low identity even when the
- * shorter matches perfectly, which is the honest answer to the question asked.
+ * Measured over the alignment's length, gap columns included, so a global
+ * alignment of sequences of different lengths reports a low identity even
+ * when the shorter matches perfectly.
  *
  * @param al {Alignment} the alignment
  * @return {float} percent identity, 0 to 100
@@ -510,9 +479,8 @@ export func percentIdentity(al as Alignment) {
 /**
  * The percentage of aligned columns scoring positively.
  *
- * Identities plus conservative substitutions. Only meaningful under a
- * substitution matrix: with a plain match/mismatch scheme nothing but an
- * identity can score positively, so this equals `percentIdentity`.
+ * Identities plus conservative substitutions. Without a substitution matrix
+ * only identities score positively, so this equals `percentIdentity`.
  *
  * @param al {Alignment} the alignment
  * @return {float} percent similarity, 0 to 100
@@ -563,10 +531,9 @@ func requireAligned(al as Alignment) {
 /**
  * Render an alignment as numbered blocks, the way EMBOSS prints one.
  *
- * Each block shows the first sequence, the markup line, and the second, with
- * the position each row starts at. Positions count from 1 and skip gaps, so
- * they are positions in the original sequences rather than in the alignment -
- * which is what makes them useful for looking something up.
+ * Each block shows the first sequence, the markup line and the second, with the
+ * position each row starts at. Positions are 1-based residue positions in the
+ * original sequences (gaps not counted).
  *
  * @param al {Alignment} the alignment
  * @param width {int} residues per block; must be positive
@@ -626,9 +593,8 @@ func countResidues2(chunk as string) {
 /**
  * The number of positions at which two equal-length sequences differ.
  *
- * Substitutions only, which is why the lengths must match: Hamming distance has
- * no way to express an insertion. For sequences that may differ in length, or
- * where an indel is plausible, use `editDistance`.
+ * Substitutions only, so the lengths must match; use `editDistance` when they
+ * may differ or an indel is plausible. Residues are compared literally.
  *
  * @param a {string} the first sequence
  * @param b {string} the second sequence
@@ -660,8 +626,9 @@ export func hammingDistance(a as string, b as string) {
  * The fewest single-residue edits that turn one sequence into the other.
  *
  * Levenshtein distance: insertions, deletions and substitutions each cost one.
- * Computed with two rows rather than a full matrix, so the memory cost is the
- * shorter sequence rather than their product - the time is still O(n*m).
+ * Two rows of `len(b) + 1` entries instead of a full matrix, so memory is O(m)
+ * in the second sequence's length (pass the shorter one second); time is O(n*m).
+ * `maxCells` does not apply.
  *
  * @param a {string} the first sequence
  * @param b {string} the second sequence

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - composition: what a sequence is made of, and what that implies.
@@ -20,9 +20,7 @@
 /**
  * Count each residue in a nucleotide sequence.
  *
- * Every base actually present gets an entry; bases absent from the sequence are
- * absent from the map, so guard a lookup with `maps.has` or use
- * `baseFrequency`, which fills the four standard bases in.
+ * Only residues present get an entry: guard a lookup with `maps.has`.
  *
  * @param s {string} a DNA or RNA sequence
  * @return {map of string to int} residue -> count
@@ -109,9 +107,9 @@ func toPercentages(counts as map of string to int) {
 /**
  * The percentage of the sequence that is G or C.
  *
- * Ambiguity codes count toward the length but toward neither G nor C, which is
- * the convention that keeps `gcContent` and `atContent` from summing above 100
- * on a sequence carrying `N`.
+ * Ambiguity codes count toward the length but not toward G or C, so
+ * `gcContent` and `atContent` sum to less than 100 on a sequence carrying `N`
+ * (`S` is not counted as GC).
  *
  * @param s {string} a DNA or RNA sequence
  * @return {float} the GC percentage, 0 to 100
@@ -132,7 +130,8 @@ export func gcContent(s as string) {
 }
 
 /**
- * The percentage of the sequence that is A, T or U.
+ * The percentage of the sequence that is A, T or U. Ambiguity codes count toward
+ * the length only.
  *
  * @param s {string} a DNA or RNA sequence
  * @return {float} the AT percentage, 0 to 100
@@ -154,12 +153,9 @@ export func atContent(s as string) {
 /**
  * GC content measured in a sliding window.
  *
- * The input to a GC plot, and the way isochores, GC skew and horizontally
- * transferred regions become visible: a genome's average GC says little, while
- * its local variation says a great deal.
- *
- * The last partial window is dropped, so every value covers exactly `size`
- * bases and the series is directly comparable along its length.
+ * Windows start at 0, `step`, `2 * step`, ...; the last partial window is
+ * dropped, so every value covers exactly `size` bases. `windows` cuts the same
+ * way.
  *
  * @param s {string} a DNA or RNA sequence
  * @param size {int} the window width in bases; must be positive
@@ -203,15 +199,13 @@ export func gcWindows(s as string, size as int, step as int) {
 /**
  * The average molecular weight of a sequence, in daltons.
  *
- * For `DNA` and `RNA` this is a **single strand with a free 5' hydroxyl** - a
- * synthesised oligo, not a duplex and not a phosphorylated one: the residue
- * masses are summed, one water is added for the termini, and one metaphosphate
- * is removed. Double it, roughly, for a duplex. For `PROTEIN` it is the residue
- * masses plus one water, the ExPASy convention.
+ * For `DNA` and `RNA`: one strand with a free 5' hydroxyl (an unphosphorylated
+ * synthetic oligo), computed as the residue masses plus `WATER_AVG_MASS` minus
+ * `PHOSPHATE_MASS`. Roughly double it for a duplex. For `PROTEIN`: the average
+ * residue masses plus one water, the ExPASy convention.
  *
- * Ambiguity codes raise. A base that might be any of four has no mass, and the
- * average of the possibilities would be a number that looks precise and means
- * nothing.
+ * Ambiguity codes (and `*`, `B`, `Z`, `X`, `J` in protein) raise rather than
+ * being averaged.
  *
  * @param s {string} the sequence
  * @param kind {int} `bioseq.DNA`, `bioseq.RNA` or `bioseq.PROTEIN`
@@ -267,11 +261,10 @@ export func molecularWeight(s as string, kind as int) {
 /**
  * Melting temperature by the Wallace rule, in degrees Celsius.
  *
- * `Tm = 2(A+T) + 4(G+C)`. Crude, instant, and still the number quoted on a
- * primer tube. It is calibrated for short oligos - roughly 14 to 20 bases - and
- * grows steadily less trustworthy beyond that, because it ignores sequence
- * order, salt and strand concentration entirely. Use `meltingTempNn` when the
- * answer matters.
+ * `Tm = 2(A+T) + 4(G+C)`. Calibrated for oligos of about 14 to 20 bases; it
+ * ignores order, salt and strand concentration, and on longer sequences returns
+ * a number with no physical meaning. Use `meltingTempNn` when the answer
+ * matters. RNA is rejected.
  *
  * @param s {string} a DNA sequence
  * @return {float} the melting temperature in Celsius
@@ -296,8 +289,8 @@ export func meltingTemp(s as string) {
 }
 
 /**
- * Melting temperature by the nearest-neighbour model, at the usual PCR
- * conditions: 250 nM primer and 50 mM sodium.
+ * Melting temperature by the nearest-neighbour model at 250 nM primer and 50 mM
+ * Na+: `meltingTempNnWith(s, 250.0, 50.0)`.
  *
  * @param s {string} a DNA sequence of at least two bases
  * @return {float} the melting temperature in Celsius
@@ -311,16 +304,13 @@ export func meltingTempNn(s as string) {
 /**
  * Melting temperature by the nearest-neighbour model, at chosen conditions.
  *
- * The real calculation: stacking energy depends on which base follows which, so
- * `GCGCGC` and `GGGCCC` have the same composition and different stabilities -
- * a difference the Wallace rule cannot see at all. Enthalpy and entropy are
- * summed over the sequence's dinucleotides, corrected for helix initiation at
- * each end, for salt, and for self-complementarity, then
- * `Tm = dH / (dS + R ln(Ct/4)) - 273.15`.
+ * Enthalpy and entropy are summed over the dinucleotides, plus helix initiation
+ * for each terminal base (G-C or A-T), a salt term of `0.368 * (N - 1) * ln[Na+]`
+ * on the entropy, and, for a self-complementary strand, the symmetry term with
+ * `Ct` in place of `Ct/4`. Then `Tm = dH / (dS + R ln(Ct/4)) - 273.15`.
  *
- * Uses the SantaLucia (1998) unified parameter set throughout, exported as
- * `NN_ENTHALPY` and `NN_ENTROPY`. Other published sets give answers differing
- * by a degree or two; this one is named so the difference is attributable.
+ * Parameters: SantaLucia (1998) unified set, exported as `NN_ENTHALPY`,
+ * `NN_ENTROPY` and `GAS_CONSTANT`. Other sets differ by a degree or two.
  *
  * @param s {string} a DNA sequence of at least two bases
  * @param primerNm {float} total strand concentration in nanomolar
@@ -411,9 +401,9 @@ func requireUnambiguousDna(s as string) {
 /**
  * The net charge of a protein at a given pH.
  *
- * Sums the fractional protonation of every ionisable group: the two termini and
- * the side chains of D, E, C, Y (acidic) and H, K, R (basic). Uses the EMBOSS
- * `iep` pKa set, exported through `aminoAcid` and the `PKA_*` constants.
+ * Sums the fractional charge of the two termini and the side chains of D, E, C,
+ * Y (acidic) and H, K, R (basic). pKa values are the EMBOSS `iep` set, exported
+ * through `aminoAcid` and the `PKA_*` constants. Decreases monotonically with pH.
  *
  * @param p {string} a protein sequence
  * @param ph {float} the pH to evaluate at
@@ -470,8 +460,9 @@ func ionisableCounts(clean as string) {
  * @internal
  */
 func chargeOfCounts(counts as list of int, ph as float) {
-    def charge as float init 1.0 / (1.0 + math.pow(10.0, $ph - PKA_N_TERMINUS)) - 1.0 / (1.0 +
-        math.pow(10.0, PKA_C_TERMINUS - $ph));
+    def nTerminus as float init 1.0 / (1.0 + math.pow(10.0, $ph - PKA_N_TERMINUS));
+    def cTerminus as float init 1.0 / (1.0 + math.pow(10.0, PKA_C_TERMINUS - $ph));
+    def charge as float init $nTerminus - $cTerminus;
     for (def code as int init 0; $code < 128; $code = $code + 1) {
         def many as int init $counts[$code];
         if ($many == 0) {
@@ -491,13 +482,9 @@ func chargeOfCounts(counts as list of int, ph as float) {
 /**
  * The pH at which a protein carries no net charge.
  *
- * Found by bisection on `netCharge`, which decreases monotonically with pH, so
- * the search always converges; it stops once the net charge is within 1e-4 of
- * zero, or after a hundred halvings of the 0-14 interval.
- *
- * The value depends on the pKa set: EMBOSS, ExPASy and Sillero disagree by a
- * few tenths of a pH unit on the same sequence. This deck uses the EMBOSS `iep`
- * set, so compare against `iep` rather than against ProtParam.
+ * Bisection on `netCharge` over pH 0 to 14, stopping when the charge is within
+ * 1e-4 of zero or after 100 halvings. Uses the EMBOSS `iep` pKa set: compare
+ * against `iep`, not ProtParam (pKa sets differ by a few tenths of a unit).
  *
  * @param p {string} a protein sequence
  * @return {float} the isoelectric point
@@ -529,9 +516,8 @@ export func isoelectricPoint(p as string) {
 /**
  * The grand average of hydropathy - the mean Kyte-Doolittle index.
  *
- * Positive means overall hydrophobic, negative hydrophilic. A soluble globular
- * protein typically lands between -0.5 and -1.5; a membrane-spanning one runs
- * positive.
+ * Positive is hydrophobic. Soluble globular proteins typically score -0.5 to
+ * -1.5; membrane-spanning ones score positive.
  *
  * @param p {string} a protein sequence
  * @return {float} the mean hydropathy
@@ -584,11 +570,8 @@ export func aromaticity(p as string) {
  * @field counts {map of string to int} residue -> count
  * @field molecularWeight {float} single-stranded mass in daltons, 0.0 when the
  *        sequence carries ambiguity codes and has no defined mass
- * @field meltingTemp {float} Wallace-rule Tm in Celsius, 0.0 when undefined.
- *        The Wallace rule is calibrated for oligos of roughly 14 to 20 bases
- *        and is simply extrapolated beyond that - on a gene-length sequence it
- *        returns a large number with no physical meaning. Read it together with
- *        `length`, and use `meltingTempNn` for anything that matters.
+ * @field meltingTemp {float} Wallace-rule Tm in Celsius, 0.0 when undefined;
+ *        meaningless beyond about 20 bases
  * @field ambiguous {bool} true when the sequence carries any non-ACGT code, in
  *        which case the two numbers above are 0.0 rather than guessed
  */
@@ -605,10 +588,8 @@ export def struct DnaStats {
 /**
  * Summarise a DNA sequence in one pass.
  *
- * The convenience form of the individual verbs, for a report or a table. A
- * sequence carrying ambiguity codes still gets its length, composition and GC
- * content; the mass and melting temperature are reported as 0.0 with
- * `ambiguous` set, rather than raising or inventing a number.
+ * A sequence carrying ambiguity codes still gets its length, counts, GC and AT;
+ * mass and melting temperature are 0.0 and `ambiguous` is set. RNA is rejected.
  *
  * @param s {string} a DNA sequence
  * @return {DnaStats} the summary
@@ -666,6 +647,9 @@ export def struct ProteinStats {
 /**
  * Summarise a protein sequence in one pass.
  *
+ * A sequence carrying `B`, `Z`, `X`, `J` or `*` still gets its length, counts and
+ * aromaticity; mass, pI and GRAVY are 0.0 and `ambiguous` is set.
+ *
  * @param p {string} a protein sequence
  * @return {ProteinStats} the summary
  * @throws {Error} kind "bioinformatics" when the sequence is empty or not a protein
@@ -706,8 +690,7 @@ export func proteinStats(p as string) {
  * @field codon {string} the codon
  * @field aminoAcid {string} the residue it encodes under the table used
  * @field count {int} occurrences in the sequence
- * @field fraction {float} share of the codons encoding this same residue, 0 to
- *        1 - the figure a codon-usage table reports
+ * @field fraction {float} share of the codons encoding this same residue, 0 to 1
  * @field perThousand {float} occurrences per thousand codons in the sequence
  */
 export def struct CodonUse {
@@ -722,7 +705,7 @@ export def struct CodonUse {
  * Tabulate codon usage under the standard genetic code.
  *
  * @param nt {string} a coding sequence
- * @return {list of CodonUse} one entry per codon actually used
+ * @return {list of CodonUse} one entry per codon present
  * @throws {Error} kind "bioinformatics" when the sequence is empty, not a nucleic acid,
  *         or shorter than one codon
  */
@@ -733,14 +716,14 @@ export func codonUsage(nt as string) {
 /**
  * Tabulate codon usage under a named genetic code.
  *
- * `fraction` is the share of each residue's synonymous codons, which is what
- * makes the table useful: a highly expressed gene leans hard on a few preferred
- * codons, and that bias is what codon-optimisation software rewrites. Codons
- * absent from the sequence are absent from the result.
+ * Codons are reported in DNA spelling (`U` read as `T`). A trailing partial codon
+ * is dropped. A codon the table does not hold, such as one with an ambiguity
+ * code, is counted under residue `X`. Codons absent from the sequence are absent
+ * from the result.
  *
  * @param nt {string} a coding sequence
  * @param table {map of string to string} a genetic code
- * @return {list of CodonUse} one entry per codon actually used, in first-seen
+ * @return {list of CodonUse} one entry per codon present, in first-seen
  *         order
  * @throws {Error} kind "bioinformatics" when the sequence is empty, not a nucleic acid,
  *         or shorter than one codon

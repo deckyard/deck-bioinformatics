@@ -1,13 +1,13 @@
-# @jennifer/bioinformatics
+# @deckyard/bioinformatics
 
-**Sequence manipulation for DNA, RNA and protein**, in the
-[Jennifer](https://jennifer-lang.dev/) language.
+Sequence manipulation for DNA, RNA and protein in
+[Jennifer](https://jennifer-lang.dev/), modelled on the
+[Sequence Manipulation Suite](https://www.bioinformatics.org/sms2/).
 
-Transforms, composition and physical properties, pattern and feature search,
-FASTA and FASTQ, sequence generation, and pairwise alignment.
+This deck is part of [Deckyard](https://github.com/deckyard), community decks for [Jennifer](https://jennifer-lang.dev/).
 
 ```jennifer
-import "@jennifer/bioinformatics/" as bioseq;
+import "@deckyard/bioinformatics/" as bioseq;
 
 def gene as string init bioseq.filterDna("1 atg acg tta cat gga taa");
 
@@ -17,73 +17,34 @@ bioseq.gcContent($gene);                    # 33.33
 bioseq.molecularWeight($gene, bioseq.DNA);  # 5546.66
 ```
 
-## Sequences are strings
-
-There is no `Seq` type to construct and no wrapper to unwrap.
-`bioseq.reverseComplement("ATGC")` is `"GCAT"`, and every verb in the deck takes
-and returns plain strings.
-
-The package is named for the field; the alias is named for what the calls act
-on. `bioseq.reverseComplement($s)` reads better in a pipeline than
-`bioinformatics.reverseComplement($s)`, and every snippet in the documentation
-binds `bioseq`, so they copy-paste directly. Nothing in the deck depends on the
-name the caller gives it.
-
-The rules that follow from strings-in, strings-out:
-
-- **Input is accepted in any case**, and residues come back uppercase.
-- **A molecule kind is an argument only where it changes the answer** -
-  `molecularWeight($s, bioseq.DNA)` takes one, `reverseComplement($s)` does not.
-- **Offsets are 0-based and half-open**, matching Jennifer's own slicing, so
-  `$s[$m.start..$m.end]` is the match. (`subrange` is the one deliberate
-  exception: it is 1-based inclusive.)
-- **Two tiers of tolerance.** `filterDna` / `filterRna` / `filterProtein`
-  silently strip anything unrecognised; every other verb tolerates whitespace,
-  digits and case but raises on a genuine foreign character, naming it and its
-  position.
-- **One error shape** - `Error{kind: "bioinformatics"}`, with a message written
-  for a human.
-
-[Sequences and alphabets](sequences.md) has the full treatment, and is the
-page to read first.
-
-## What is here
+Sequences are plain strings, offsets are 0-based half-open, and every error is
+`Error{kind: "bioinformatics"}`. Read [Sequences and alphabets](sequences.md)
+first: it states the conventions every other page relies on. Every snippet in
+this book imports the deck as `bioseq`; nothing depends on the alias.
 
 | | |
 | - | - |
-| [Transforms](transforms.md) | complement, transcribe, translate, six-frame reading, residue spellings |
-| [Composition](composition.md) | GC content, molecular weight, melting temperature, isoelectric point, GRAVY, codon usage |
-| [Search](search.md) | exact, ambiguous and approximate patterns; open reading frames; CpG islands; restriction mapping and digestion |
-| [Formats](formats.md) | FASTA and FASTQ, parsing and writing, quality scores |
-| [Manipulation](manipulate.md) | random sequences, composition-preserving shuffle, mutation, windows |
+| [Transforms](transforms.md) | complement, transcribe, translate, six frames, residue spellings |
+| [Composition](composition.md) | GC content, molecular weight, melting temperature, pI, GRAVY, codon usage |
+| [Search](search.md) | exact, IUPAC and approximate patterns; ORFs; CpG islands; restriction mapping and digestion |
+| [Formats](formats.md) | FASTA and FASTQ, quality scores |
+| [Manipulation](manipulate.md) | random sequences, shuffle, mutation, windows |
 | [Comparison](compare.md) | Needleman-Wunsch, Smith-Waterman, Hamming and edit distance |
-| [Genetic codes and residues](tables.md) | nine NCBI codes, IUPAC ambiguity, per-residue properties |
-| [Restriction enzymes](enzymes.md) | 76 hand-curated enzymes and their cut geometry |
+| [Genetic codes and residues](tables.md) | nine NCBI codes, IUPAC codes, residue properties, parameter constants |
+| [Restriction enzymes](enzymes.md) | 76 hand-curated type II enzymes |
+| [Cheatsheet](cheatsheet.md) | every export on one page |
+| [Design notes](design.md) | measurements behind the implementation, correctness anchors |
 
-The [cheatsheet](cheatsheet.md) is the whole surface on one page. The
-[design notes](design.md) explain the decisions behind it, including the
-ones that were measured rather than assumed.
+## No I/O, so it runs on `jennifer-tiny`
 
-## It runs on `jennifer-tiny`
+Nothing under `src/` touches the network, a subprocess or the filesystem. FASTA
+and FASTQ are parsed from and written to strings; reading the file is the
+caller's job ([Formats](formats.md#the-io-boundary)). There is no
+`pragma-jennifer-capability` in the deck. `[engines]` in `deck.toml` is an
+allowlist, not a version floor, so it lists `jennifer-tiny` beside `jennifer`;
+CI runs every example under both.
 
-Nothing under `src/` touches the network, a subprocess, or the filesystem.
-FASTA and FASTQ are parsed from and written to **strings**; opening the file is
-the caller's job, which `examples/` shows. There is no
-`pragma-jennifer-capability` anywhere in the deck, by design - and the
-consequence is that every function is a pure transformation that can be tested
-without a fixture on disk.
-
-`deck.toml` says so out loud: `[engines]` lists `jennifer-tiny` beside
-`jennifer`. That table is an allowlist of engines rather than a version floor,
-so a manifest naming only the full build would have a tiny run *refused* - and
-CI runs the whole example set under both on every push.
-
-## Every number names its source
-
-This deck reports melting temperatures, isoelectric points and molecular
-weights. Those depend on published parameter sets that disagree with each other
-by small but real amounts, so each function names the set it uses in its own
-documentation, and the parameters themselves are exported constants. Where a
-value can be checked against an independent source it is, and the tests say
-which checks are external anchors and which are not - see
-[Design notes](design.md#correctness).
+Melting temperatures, isoelectric points and masses depend on published
+parameter sets that disagree with each other. Each function names its set in
+its docblock and the parameters are exported constants
+([Parameter constants](tables.md#parameter-constants)).

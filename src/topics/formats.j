@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - formats: FASTA and FASTQ, over strings.
@@ -19,31 +19,27 @@
 #      the format does not say which; only structure is validated here.
 
 /**
- * The conventional FASTA line width. Sixty columns is what NCBI and EMBL emit.
+ * The FASTA line width `writeFasta` uses, as NCBI and EMBL emit.
  */
 export def const FASTA_WIDTH as int init 60;
 
 /**
- * The most records a single parse will build.
+ * The most records one `parseFasta` or `parseFastq` call builds.
  *
- * A guard against amplification rather than a limit anyone should meet: a
- * proteome runs to tens of thousands of records and a transcriptome to a few
- * hundred thousand, so a million leaves ample room for real data.
- *
- * What it stops is the degenerate case. A header line with no sequence is three
- * bytes of input and a whole `Record` in memory, so a hostile file of nothing
- * but `>` lines expands by around a hundredfold. Bounding the count bounds that.
+ * An amplification guard: a header line with no sequence is three bytes of input
+ * and a whole `Record` in memory, so a file of bare `>` lines expands about a
+ * hundredfold. A proteome has tens of thousands of records, a transcriptome a few
+ * hundred thousand.
  */
 export def const MAX_RECORDS as int init 1000000;
 
 /**
- * Phred+33 quality offset - Sanger, Illumina 1.8 and later, and every modern
- * FASTQ file. The default this deck assumes.
+ * Phred+33 quality offset: Sanger, Illumina 1.8 and later. The deck's default.
  */
 export def const PHRED33 as int init 33;
 
 /**
- * Phred+64 quality offset - Illumina 1.3 to 1.7. Only found in archived data.
+ * Phred+64 quality offset: Illumina 1.3 to 1.7, archived data only.
  */
 export def const PHRED64 as int init 64;
 
@@ -163,21 +159,18 @@ func splitHeader(header as string, marker as string) {
 /**
  * Parse FASTA text into records.
  *
- * Handles the whole conventional shape: wrapped sequence lines, blank lines
- * between records, Windows line endings, and headers carrying a description
- * after the id. Only structure is checked - the residues are not validated
- * against an alphabet, because a FASTA file may hold DNA, RNA or protein and
- * the format does not say which.
+ * Accepts wrapped sequence lines, blank lines between records, CRLF line endings
+ * and a description after the id. Spaces and tabs inside sequence lines are
+ * dropped. Only structure is checked: residues are not validated against an
+ * alphabet, and case is preserved (lowercase is soft-masking).
  *
- * Case is preserved. A record with a header but no sequence lines parses to an
- * empty `sequence` rather than raising: a parser reports what the file says,
- * and `len($r.sequence)` is the caller's guard. The record count is capped at
- * `MAX_RECORDS`, which no real file approaches but a hostile one would.
+ * A header with no sequence lines gives an empty `sequence`, not an error. At
+ * most `MAX_RECORDS` records are built.
  *
  * @param text {string} the contents of a FASTA file
  * @return {list of Record} the records, in file order
  * @throws {Error} kind "bioinformatics" when there is no record, when data appears
- *         before the first header, or when a header carries no id
+ *         before the first header, when a header carries no id, or past `MAX_RECORDS`
  * @example bioseq.parseFasta(">seq1 first\nATGC\n")[0].id == "seq1"
  */
 export func parseFasta(text as string) {
@@ -220,7 +213,9 @@ export func parseFasta(text as string) {
 }
 
 /**
- * Render records as FASTA text, wrapped at the conventional sixty columns.
+ * Render records as FASTA text, wrapped at `FASTA_WIDTH` (60) columns.
+ *
+ * A record with an empty sequence is written as its header line alone.
  *
  * @param records {list of Record} the records to write
  * @return {string} FASTA text, ending in a newline
@@ -292,16 +287,11 @@ export func wrap(s as string, width as int) {
 /**
  * Reduce any pasted sequence text to bare residues.
  *
- * Drops FASTA headers, position numbers, and all whitespace - the shape a
- * sequence arrives in when it is copied out of a paper, a database page, or an
- * alignment viewer. Unlike `filterDna` it does not judge the residues, and
- * unlike `parseFasta` it does not need a header to be present.
- *
- * Every byte at or below space is dropped, which covers the whitespace this is
- * for but also any control character that came along with it - so binary spliced
- * into sequence text is discarded silently rather than diagnosed. That is the
- * lenient behaviour this verb exists to provide; use `filterDna` or a validating
- * verb when the input should be judged rather than cleaned.
+ * Drops lines starting with `>` or `;`, digits, and every byte at or below
+ * space (whitespace and control characters alike). Everything else is kept as
+ * is: unlike `filterDna` it does not judge the residues, and unlike
+ * `parseFasta` it needs no header. Use `filterDna` or a validating verb when the
+ * input should be judged rather than cleaned.
  *
  * @param text {string} pasted sequence text
  * @return {string} the residues, in their original case
@@ -339,15 +329,16 @@ export func toPlain(text as string) {
 /**
  * Parse FASTQ text into reads.
  *
- * Reads the four-line form every sequencer emits, and also the wrapped form the
- * specification permits: sequence lines are gathered until a `+` line, then
- * quality lines until the quality is as long as the sequence. That length
- * agreement is the one structural invariant FASTQ has, and it is checked.
+ * Reads the four-line form and the wrapped form: sequence lines are gathered
+ * until a `+` line, then quality lines until the quality is as long as the
+ * sequence. Quality is read by length, not by looking for `@`, because `@` is a
+ * valid Phred+33 character (Q31). At most `MAX_RECORDS` reads are built.
  *
  * @param text {string} the contents of a FASTQ file
  * @return {list of Read} the reads, in file order
- * @throws {Error} kind "bioinformatics" when a record is truncated, lacks its `+`
- *         separator, or has a quality string of the wrong length
+ * @throws {Error} kind "bioinformatics" when there is no record, a record does not
+ *         start with `@`, lacks its `+` separator, or has a quality string of the
+ *         wrong length, or past `MAX_RECORDS`
  * @example bioseq.parseFastq("@r1\nATGC\n+\nIIII\n")[0].quality == "IIII"
  */
 export func parseFastq(text as string) {
@@ -485,7 +476,8 @@ export func fastqToFasta(reads as list of Read) {
  *
  * @param r {Read} the read
  * @return {list of int} one score per base
- * @throws {Error} kind "bioinformatics" when a quality character is out of range
+ * @throws {Error} kind "bioinformatics" when the quality and sequence lengths differ,
+ *         or a score decodes negative
  * @example bioseq.qualityScores($r)[0] == 40   # 'I' under Phred+33
  */
 export func qualityScores(r as Read) {
@@ -496,14 +488,14 @@ export func qualityScores(r as Read) {
  * Decode a read's quality string at a chosen offset.
  *
  * Use `PHRED64` for archived Illumina 1.3-1.7 data; everything current is
- * `PHRED33`. Reading one encoding as the other silently shifts every score by
- * 31, which is why the offset is explicit here rather than guessed.
+ * `PHRED33`. Reading one encoding as the other shifts every score by 31, so the
+ * offset is never guessed.
  *
  * @param r {Read} the read
  * @param offset {int} `PHRED33` or `PHRED64`
  * @return {list of int} one score per base
- * @throws {Error} kind "bioinformatics" when a quality character decodes to a negative
- *         score, which means the offset is wrong for this file
+ * @throws {Error} kind "bioinformatics" when the quality and sequence lengths differ,
+ *         or a quality character decodes to a negative score (wrong offset)
  */
 export func qualityScoresWith(r as Read, offset as int) {
     # A `Read` can arrive from somewhere other than `parseFastq` - built by
@@ -533,16 +525,15 @@ export func qualityScoresWith(r as Read, offset as int) {
 /**
  * The mean Phred score across a read, assuming Phred+33.
  *
- * Note what this is: the arithmetic mean of the scores, which is the figure
- * every tool reports and every quality plot shows. It is not the score
- * corresponding to the read's mean error probability - Phred scores are
- * logarithmic, so averaging them understates the effect of the worst bases. Use
- * `errorProbability` on the individual scores when the distinction matters.
+ * The arithmetic mean of the scores, as quality plots show it. It is not the
+ * score of the read's mean error probability: Phred is logarithmic, so the mean
+ * score understates the worst bases. Use `errorProbability` on the individual
+ * scores when that matters.
  *
  * @param r {Read} the read
  * @return {float} the mean score
- * @throws {Error} kind "bioinformatics" when the read has no bases, or a quality
- *         character is out of range
+ * @throws {Error} kind "bioinformatics" when the read has no bases, its quality and
+ *         sequence lengths differ, or a score decodes negative
  */
 export func meanQuality(r as Read) {
     return meanQualityWith($r, PHRED33);
@@ -554,8 +545,8 @@ export func meanQuality(r as Read) {
  * @param r {Read} the read
  * @param offset {int} `PHRED33` or `PHRED64`
  * @return {float} the mean score
- * @throws {Error} kind "bioinformatics" when the read has no bases, or a quality
- *         character is out of range
+ * @throws {Error} kind "bioinformatics" when the read has no bases, its quality and
+ *         sequence lengths differ, or a score decodes negative
  */
 export func meanQualityWith(r as Read, offset as int) {
     def scores as list of int init qualityScoresWith($r, $offset);

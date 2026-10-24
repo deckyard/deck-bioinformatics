@@ -1,24 +1,17 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - manipulate: generating, shuffling, mutating and slicing sequences.
 # Spliced into bioinformatics.j via include - not a standalone module.
 #
 # The random verbs draw from `math.rand`, so `math.randSeed` makes a whole run
-# reproducible - which is what a test or a published analysis needs. The deck
-# deliberately does not keep its own generator: one seed for the program is
-# easier to reason about than a hidden second stream.
-#
-# What these are for is null models. A motif that looks striking in a real
-# sequence has to be compared against something, and the honest comparison is a
-# sequence with the same composition and no structure - which is exactly what
-# `shuffle` produces and `randomDnaWith` approximates.
+# reproducible. The deck keeps no generator of its own: one seed per program,
+# no hidden second stream.
 
 /**
  * The four unambiguous DNA bases, the alphabet the random and mutation verbs
- * draw from. Ambiguity codes are deliberately excluded: a generator that
- * emitted `N` would be producing missing data, not sequence.
+ * draw from. No ambiguity codes: an `N` would be missing data, not sequence.
  */
 export def const DNA_BASES as string init "ACGT";
 
@@ -37,9 +30,7 @@ export def const STANDARD_RESIDUES as string init "ACDEFGHIKLMNPQRSTVWY";
 /**
  * A random DNA sequence of the given length, with the four bases equally likely.
  *
- * No upper bound is imposed: the length you ask for is the length allocated, so
- * the caller owns that decision. `randomDna(2000000000)` will try for two
- * gigabytes.
+ * No upper bound: `randomDna(2000000000)` tries to allocate two gigabytes.
  *
  * @param n {int} the length in bases; must be positive
  * @return {string} the sequence
@@ -65,9 +56,8 @@ export func randomRna(n as int) {
  * A random protein of the given length, with the twenty standard residues
  * equally likely.
  *
- * Note that this is not what a real protein looks like: residue frequencies in
- * nature are far from uniform. Use `randomProteinWith` and a composition drawn
- * from real data when the null model has to be realistic.
+ * Real proteins are far from uniform; use `randomProteinWith` with a measured
+ * composition for a realistic null model.
  *
  * @param n {int} the length in residues; must be positive
  * @return {string} the sequence
@@ -80,10 +70,9 @@ export func randomProtein(n as int) {
 /**
  * A random DNA sequence with a chosen base composition.
  *
- * The weights need not sum to anything in particular - they are normalised - so
- * `{"A": 3.0, "T": 3.0, "C": 2.0, "G": 2.0}` and a set of percentages both
- * work. A base left out of the map simply never appears, which is how to
- * generate, say, a purine-only sequence.
+ * Weights are relative and normalised, so `{"A": 3.0, "T": 1.0}` and
+ * `{"A": 75.0, "T": 25.0}` are the same distribution. A base left out of the map
+ * (or weighted 0) never appears.
  *
  * @param n {int} the length in bases; must be positive
  * @param weights {map of string to float} base -> relative frequency
@@ -97,12 +86,14 @@ export func randomDnaWith(n as int, weights as map of string to float) {
 }
 
 /**
- * A random RNA sequence with a chosen base composition.
+ * A random RNA sequence with a chosen base composition. Weights as for
+ * `randomDnaWith`, keys from `ACGU`.
  *
  * @param n {int} the length in bases; must be positive
  * @param weights {map of string to float} base -> relative frequency
  * @return {string} the sequence
- * @throws {Error} kind "bioinformatics" when a parameter is out of range
+ * @throws {Error} kind "bioinformatics" when the length is not positive, a key is not
+ *         one of `ACGU`, a weight is negative, or every weight is zero
  */
 export func randomRnaWith(n as int, weights as map of string to float) {
     return randomWeighted($n, $weights, RNA_BASES);
@@ -111,13 +102,15 @@ export func randomRnaWith(n as int, weights as map of string to float) {
 /**
  * A random protein with a chosen residue composition.
  *
- * Pair it with `residueFrequency` on a real protein to generate a null sequence
- * that matches its composition without keeping any of its order.
+ * Weights as for `randomDnaWith`, keys from `STANDARD_RESIDUES`.
+ * `residueFrequency` of a real protein is a valid weight map.
  *
  * @param n {int} the length in residues; must be positive
  * @param weights {map of string to float} residue -> relative frequency
  * @return {string} the sequence
- * @throws {Error} kind "bioinformatics" when a parameter is out of range
+ * @throws {Error} kind "bioinformatics" when the length is not positive, a key is not
+ *         one of the twenty standard residues, a weight is negative, or every
+ *         weight is zero
  */
 export func randomProteinWith(n as int, weights as map of string to float) {
     return randomWeighted($n, $weights, STANDARD_RESIDUES);
@@ -221,14 +214,8 @@ func requirePositiveLength(n as int) {
 /**
  * Reorder a sequence at random, keeping its composition exactly.
  *
- * A Fisher-Yates shuffle, so every permutation is equally likely and the
- * residue counts are unchanged by construction - `baseCount(shuffle(s))` always
- * equals `baseCount(s)`.
- *
- * This is the honest null model for "is this motif surprising?". A random
- * sequence of the same length answers a weaker question, because it differs
- * from the real one in composition as well as order; a shuffle differs only in
- * order, which is usually the hypothesis being tested.
+ * Fisher-Yates: every permutation equally likely, residue counts unchanged.
+ * The null model for "is this motif surprising?" that keeps composition fixed.
  *
  * @param s {string} any sequence
  * @return {string} the same residues in a random order
@@ -253,13 +240,11 @@ export func shuffle(s as string) {
 /**
  * Substitute residues at random, at a given per-position rate.
  *
- * Substitutions only - no insertions, no deletions - and a mutated position
- * always changes, since a substitution that happened to pick the original
- * residue would make the realised rate lower than the one asked for.
- *
- * The rate is a probability per position, so the number of changes varies
- * between calls: at rate 0.1 a hundred-base sequence takes about ten
- * substitutions, not exactly ten.
+ * Substitutions only. Each position mutates with probability `rate`, so the
+ * number of changes varies between calls. A mutated position always changes:
+ * the replacement is drawn from the alphabet minus the current residue
+ * (`DNA_BASES`, `RNA_BASES` or `STANDARD_RESIDUES`). An ambiguity code chosen
+ * for mutation is replaced by a draw from the whole alphabet.
  *
  * @param s {string} the sequence to mutate
  * @param rate {float} the per-position substitution probability, 0 to 1
@@ -337,19 +322,16 @@ func differentResidue(pool as bytes, current as int) {
 /**
  * Extract a subsequence by 1-based inclusive position.
  *
- * **This is the deck's one 1-based verb**, and it is named for it. Every other
- * offset in bioinformatics is 0-based and half-open, matching Jennifer's own slicing -
- * but sequence positions are quoted 1-based inclusive everywhere in biology, so
- * a paper saying "residues 25 to 40" transcribes directly as
- * `subrange($s, 25, 40)`. Reach for `$s[$a..$b]` when working in the deck's own
- * coordinates.
+ * The deck's one 1-based verb: "residues 25 to 40" is `subrange($s, 25, 40)`,
+ * the same as `$s[24..40]`. Positions count residues after whitespace and digits
+ * are removed.
  *
  * @param s {string} the sequence
  * @param from {int} the first position, counting from 1
  * @param through {int} the last position, included
  * @return {string} the subsequence
- * @throws {Error} kind "bioinformatics" when the range falls outside the sequence or
- *         runs backwards
+ * @throws {Error} kind "bioinformatics" when the sequence is empty or holds a
+ *         non-residue, the range falls outside it, or runs backwards
  * @example bioseq.subrange("ATGCATGC", 3, 5) == "GCA"
  */
 export func subrange(s as string, from as int, through as int) {
@@ -369,11 +351,10 @@ export func subrange(s as string, from as int, through as int) {
 }
 
 /**
- * Cut a sequence into overlapping windows.
+ * Cut a sequence into windows of `size` residues starting every `step`.
  *
- * The last partial window is dropped, so every window is exactly `size` long
- * and the series is directly comparable along its length - the same rule
- * `gcWindows` follows.
+ * Windows overlap when `step < size`. The last partial window is dropped, as in
+ * `gcWindows`. Works on any sequence.
  *
  * @param s {string} the sequence
  * @param size {int} the window width; must be positive

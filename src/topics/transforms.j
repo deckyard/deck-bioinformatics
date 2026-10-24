@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - transforms: turning one sequence into another.
@@ -15,14 +15,10 @@
 /**
  * Complement each base, leaving the sequence in its original 5'-to-3' order.
  *
- * This is the strand-pairing operation on its own: it is almost never what you
- * want by itself, because a complementary strand read in the same direction is
- * written 3'-to-5'. `reverseComplement` is the one to reach for.
- *
- * The alphabet is preserved: an RNA sequence complements with `U`, a DNA
- * sequence with `T`. Ambiguity codes complement as sets, so `R` (A or G)
- * becomes `Y` (C or T), and the self-complementary `S`, `W` and `N` are
- * unchanged.
+ * The result reads 3' to 5'; `reverseComplement` gives the other strand 5' to 3'.
+ * The alphabet is preserved: a sequence containing `U` complements with `U`, any
+ * other (including one with neither `T` nor `U`) as DNA. Ambiguity codes
+ * complement as sets (`R` to `Y`, `B` to `V`); `S`, `W` and `N` are unchanged.
  *
  * @param s {string} a DNA or RNA sequence
  * @return {string} the complement, in the same alphabet and the same order
@@ -36,12 +32,8 @@ export func complement(s as string) {
 }
 
 /**
- * Complement each base and reverse the sequence - the other strand, read the
- * way sequences are always read.
- *
- * The workhorse of the topic: a restriction site, a primer, or a feature found
- * on the minus strand is this operation away from the strand you have.
- * Applying it twice returns the original.
+ * The other strand, 5' to 3'. Alphabet rules as for `complement`; applying it
+ * twice returns the original.
  *
  * @param s {string} a DNA or RNA sequence
  * @return {string} the reverse complement, in the same alphabet
@@ -57,10 +49,8 @@ export func reverseComplement(s as string) {
 /**
  * Reverse the residues, without complementing them.
  *
- * Works on any sequence, protein included - it is a string operation on
- * residues, not a strand operation. Rarely biologically meaningful on its own;
- * it is here because SMS has it and because it makes `reverseComplement`
- * decomposable.
+ * Works on any sequence, protein included.
+ * `reverseComplement(s) == reverse(complement(s))`.
  *
  * @param s {string} any sequence
  * @return {string} the residues in reverse order
@@ -148,9 +138,7 @@ func complementBytes(clean as string, rna as bool, backwards as bool) {
 /**
  * Transcribe DNA to RNA: every `T` becomes `U`.
  *
- * This is the coding-strand shorthand, not the biological event - it does not
- * complement, because the mRNA sequence matches the coding strand and only the
- * thymines are spelled differently.
+ * Coding-strand convention: nothing is complemented.
  *
  * @param dna {string} a DNA sequence
  * @return {string} the RNA spelling
@@ -203,14 +191,10 @@ func swapCode(clean as string, oldCode as int, newCode as int) {
 /**
  * Translate a nucleotide sequence under the standard genetic code.
  *
- * Reads codons from the first base. A trailing one or two bases cannot form a
- * codon and are dropped. A stop codon becomes `*` and does **not** end the
- * translation - the whole sequence is read, because a caller looking for open
- * reading frames needs to see where the stops fall. A codon holding an
- * ambiguity code translates to `X` unless every base it could stand for gives
- * the same residue, in which case that residue is used.
- *
- * RNA is accepted directly; `U` is read as `T` for the lookup.
+ * Reads codons from the first base; a trailing one or two bases are dropped. A
+ * stop codon becomes `*` and does not end the translation. A codon holding an
+ * ambiguity code translates to the residue all its expansions agree on (`GGN`
+ * is `G`), otherwise `X`. RNA is accepted; `U` is read as `T`.
  *
  * @param nt {string} a DNA or RNA sequence
  * @return {string} the protein, stops as `*`
@@ -224,10 +208,8 @@ export func translate(nt as string) {
 /**
  * Translate under a named genetic code.
  *
- * The alternative codes matter more often than they look: a mitochondrial gene
- * translated under the standard code stops early at every `TGA`, and a ciliate
- * gene never stops at all. Pass the table for the organism, or `codonTable(id)`
- * when the id is carried in data.
+ * Rules as for `translate`. Pass a named table such as `VERTEBRATE_MITOCHONDRIAL`,
+ * or `codonTable(id)` when the id is carried in data.
  *
  * @param nt {string} a DNA or RNA sequence
  * @param table {map of string to string} a genetic code, e.g. `bioseq.BACTERIAL`
@@ -244,8 +226,8 @@ export func translateWith(nt as string, table as map of string to string) {
  * Translate one reading frame.
  *
  * Frames `1`, `2` and `3` start at the first, second and third base of the
- * forward strand. Frames `-1`, `-2` and `-3` do the same on the reverse
- * complement, so frame `-1` starts at the last base and reads back.
+ * forward strand; `-1`, `-2` and `-3` do the same on the reverse complement, so
+ * frame `-1` starts at the last base. A frame starting past the end gives "".
  *
  * @param nt {string} a DNA or RNA sequence
  * @param frame {int} one of 1, 2, 3, -1, -2, -3
@@ -288,9 +270,7 @@ export func translateFrameWith(nt as string, frame as int, table as map of strin
 /**
  * Translate all six reading frames under the standard genetic code.
  *
- * Three forward frames then three reverse, in the order `1, 2, 3, -1, -2, -3`.
- * This is what an ORF search reads, and what you look at when a sequence's
- * frame is unknown.
+ * In the order `1, 2, 3, -1, -2, -3`. For start/stop-aware search use `orfs`.
  *
  * @param nt {string} a DNA or RNA sequence
  * @return {list of Frame} one record per frame
@@ -398,12 +378,8 @@ func translateClean(clean as string, table as map of string to string) {
  * Translate a codon holding ambiguity codes.
  *
  * Expands each position and reads every codon the ambiguity admits. When they
- * all give the same residue the answer is unambiguous despite the ambiguity -
- * `MGN` is arginine in every expansion, and `GGN` is glycine - so that residue
- * is returned rather than `X`. Otherwise the result is genuinely unknown.
- *
- * The expansion is at most 4x4x4, so this stays cheap even in the worst case,
- * and it is only reached for codons that missed the table outright.
+ * all give the same residue (`MGN` is arginine, `GGN` glycine) that residue is
+ * returned, otherwise `X`. At most 4x4x4 codons, reached only on a table miss.
  *
  * @param codon {string} a three-character codon, possibly ambiguous
  * @param table {map of string to string} a genetic code
@@ -483,9 +459,8 @@ export func splitCodons(nt as string) {
 /**
  * Rewrite a protein in three-letter codes.
  *
- * `MKV` becomes `MetLysVal`. The ambiguity codes and the stop symbol have
- * spellings too - `X` is `Xaa`, `*` is `Ter` - so any sequence `translate`
- * produces can be rewritten.
+ * `MKV` becomes `MetLysVal`. Ambiguity codes and the stop have spellings too
+ * (`X` is `Xaa`, `*` is `Ter`; see `THREE_LETTER`).
  *
  * @param protein {string} a protein sequence in one-letter codes
  * @return {string} the same sequence in three-letter codes, unseparated
@@ -508,8 +483,7 @@ export func oneToThree(protein as string) {
  * Read a three-letter protein back into one-letter codes.
  *
  * The inverse of `oneToThree`. Codes may be run together (`MetLysVal`) or
- * separated by spaces or hyphens (`Met-Lys-Val`), which is how they are usually
- * written in prose.
+ * separated by spaces or hyphens (`Met-Lys-Val`).
  *
  * @param protein {string} a protein sequence in three-letter codes
  * @return {string} the one-letter spelling
