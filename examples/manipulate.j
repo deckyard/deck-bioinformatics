@@ -1,6 +1,6 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - generating, shuffling, mutating and slicing.
@@ -10,9 +10,9 @@
 # Run it from the repository root - the testdata/ path is relative to the
 # working directory, not to this file.
 #
-# The through-line here is the null model: a finding in a real sequence only
-# means something once you know what the same question answers on sequence with
-# no structure in it.
+# Random sequences, shuffle, mutation and windows, used to build null models: a
+# finding in a real sequence means something only against the same question
+# asked of sequence with no structure.
 
 use io;
 use fs;

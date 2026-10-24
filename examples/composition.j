@@ -1,6 +1,6 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - what a sequence is made of, and what that implies.
@@ -11,8 +11,7 @@
 # working directory, not to this file.
 #
 # GC content, molecular weight, melting temperature, isoelectric point, GRAVY
-# and codon usage. Every number here comes from a published parameter set, and
-# each one is named where it is used.
+# and codon usage, each with the parameter set it uses named.
 
 use io;
 use fs;

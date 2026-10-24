@@ -1,14 +1,14 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - turning one sequence into another.
 #
 #   jennifer run examples/transforms.j
 #
-# Complement, transcribe, translate, and read all six frames. No network, no
-# files, no arguments.
+# Complement, transcribe, translate, and read all six frames. Needs no network,
+# file or argument.
 
 use io;
 use strings;

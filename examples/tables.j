@@ -1,6 +1,6 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - the reference data the deck carries.
@@ -8,7 +8,7 @@
 #   jennifer run examples/tables.j
 #
 # Genetic codes, IUPAC ambiguity codes, residue properties and restriction
-# enzymes. Nothing here needs a network, a file, or an argument.
+# enzymes. Needs no network, file or argument.
 
 use io;
 use strings;

@@ -1,18 +1,16 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - the measurements behind the deck's implementation conventions.
 #
 #   jennifer run examples/bench.j
 #
-# These are not micro-benchmarks for their own sake. Each one settles a choice
-# the deck had to make about how its loops are written, and each is here so a
-# later change that regresses the choice shows up as a number rather than as a
-# slow user. The commentary records what the numbers said on the machine they
-# were first taken on; the ratios are what matter, not the absolute
-# milliseconds. docs/design.md tells the story around them.
+# Each measurement settled a choice about how the deck's loops are written, and
+# is kept so a regression shows up as a number. The commentary records the
+# numbers from the machine they were first taken on; compare ratios, not
+# milliseconds. docs/design.md discusses them.
 
 use io;
 use time;

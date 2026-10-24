@@ -1,6 +1,6 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - reading and writing FASTA and FASTQ.
@@ -10,10 +10,9 @@
 # Run it from the repository root - the testdata/ paths are relative to the
 # working directory, not to this file.
 #
-# This is the example that shows the deck's I/O boundary. bioinformatics parses and
-# writes *text*; opening the file is the caller's job, and `fs` is used here,
-# not inside src/. That is what keeps the deck free of a filesystem capability
-# and runnable on jennifer-tiny.
+# The deck parses and writes text; opening the file is the caller's job, so `fs`
+# is used here and never inside src/. That keeps the deck free of a filesystem
+# capability and runnable on jennifer-tiny.
 
 use io;
 use fs;
