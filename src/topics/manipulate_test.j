@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - white-box tests for the manipulate topic.
@@ -120,6 +120,46 @@ func testWeightedCanExcludeResidues() {
     testing.assertEqual(countOf($purines, "T"), 0);
     testing.assertEqual(countOf($purines, "C"), 0);
     testing.assertEqual(countOf($purines, "A") + countOf($purines, "G"), 300);
+}
+
+func testRandomRnaWith() {
+    math.randSeed(13);
+    def s as string init randomRnaWith(2000, {"U": 80.0, "G": 20.0});
+    testing.assertEqual(len($s), 2000);
+    testing.assertTrue(isRna($s));
+    testing.assertEqual(countOf($s, "A") + countOf($s, "C"), 0);
+    def shareU as float init 100.0 * countOf($s, "U") / 2000.0;
+    testing.assertTrue($shareU > 75.0 and $shareU < 85.0);
+}
+
+func testRandomProteinWith() {
+    # a composition taken from a real protein restricts the output to its residues
+    math.randSeed(17);
+    def s as string init randomProteinWith(1000, residueFrequency("WWWC"));
+    testing.assertEqual(len($s), 1000);
+    testing.assertEqual(countOf($s, "W") + countOf($s, "C"), 1000);
+    def shareW as float init 100.0 * countOf($s, "W") / 1000.0;
+    testing.assertTrue($shareW > 70.0 and $shareW < 80.0);
+}
+
+func testWeightedRnaAndProteinRejectForeignResidues() {
+    testing.assertThrows("rnaWeightsWithT", "bioinformatics");
+    testing.assertThrows("proteinWeightsWithB", "bioinformatics");
+    testing.assertThrows("proteinWeightsZeroLength", "bioinformatics");
+}
+
+func rnaWeightsWithT() {
+    # T is DNA; the RNA generator draws from ACGU
+    randomRnaWith(10, {"A": 1.0, "T": 1.0});
+}
+
+func proteinWeightsWithB() {
+    # B (D or N) is an ambiguity code, not one of the twenty standard residues
+    randomProteinWith(10, {"A": 1.0, "B": 1.0});
+}
+
+func proteinWeightsZeroLength() {
+    randomProteinWith(0, {"A": 1.0});
 }
 
 func testGenerationRejectsBadInput() {

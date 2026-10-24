@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - white-box tests for the formats topic.
@@ -347,6 +347,34 @@ func testMeanQuality() {
     testing.assertEqual(meanQuality($r), 40.0);
     # read2 averages the four Q0 and four Q2 bases
     testing.assertEqual(meanQuality(parseFastq(FASTQ_TWO)[1]), 1.0);
+}
+
+func testMeanQualityWith() {
+    # 'h' is 104: Q40 under Phred+64; '@' and 'B' are Q0 and Q2
+    def old as Read init Read{id: "r", description: "", sequence: "ATGC", quality: "hhhh"};
+    testing.assertEqual(meanQualityWith($old, PHRED64), 40.0);
+    def mixed as Read init Read{id: "m", description: "", sequence: "AT", quality: "@B"};
+    testing.assertEqual(meanQualityWith($mixed, PHRED64), 1.0);
+    # the same characters read as Phred+33 score 31 higher
+    testing.assertEqual(meanQualityWith($mixed, PHRED33), 32.0);
+    # and the default is Phred+33
+    testing.assertEqual(
+        meanQualityWith(parseFastq(FASTQ_TWO)[0], PHRED33),
+        meanQuality(parseFastq(FASTQ_TWO)[0]));
+}
+
+func testMeanQualityWithRejects() {
+    testing.assertThrows("meanQualityOfEmptyRead", "bioinformatics");
+    testing.assertThrows("meanQualityWrongOffset", "bioinformatics");
+}
+
+func meanQualityOfEmptyRead() {
+    meanQualityWith(Read{id: "e", description: "", sequence: "", quality: ""}, PHRED33);
+}
+
+func meanQualityWrongOffset() {
+    # '!' is Q0 under Phred+33 and negative under Phred+64
+    meanQualityWith(Read{id: "w", description: "", sequence: "A", quality: "!"}, PHRED64);
 }
 
 func testErrorProbability() {

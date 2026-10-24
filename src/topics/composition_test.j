@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-3.0-only
-# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <jennifer@mplx.dev>
+# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
 # pragma-jennifer-version: >=0.25.0
 
 # bioinformatics - white-box tests for the composition topic.
@@ -56,6 +56,34 @@ func testResidueCount() {
     testing.assertEqual($counts["L"], 8);
     testing.assertEqual($counts["A"], 6);
     testing.assertEqual($counts["W"], 2);
+}
+
+func testResidueFrequency() {
+    # three of four residues are A
+    def simple as map of string to float init residueFrequency("AAAC");
+    testing.assertEqual($simple["A"], 75.0);
+    testing.assertEqual($simple["C"], 25.0);
+    # absent residues get no entry
+    testing.assertFalse(maps.has($simple, "W"));
+
+    # preproinsulin's first 24 residues: 8 L, 6 A, 2 W
+    def freq as map of string to float init residueFrequency(INS_PROTEIN);
+    testing.assertTrue(close($freq["L"], 100.0 * 8.0 / 24.0, 0.000001));
+    testing.assertEqual($freq["A"], 25.0);
+    testing.assertTrue(close($freq["W"], 100.0 * 2.0 / 24.0, 0.000001));
+    def total as float init 0.0;
+    for (def residue in $freq) {
+        $total = $total + $freq[$residue];
+    }
+    testing.assertTrue(close($total, 100.0, 0.000001));
+}
+
+func testResidueFrequencyRejectsEmpty() {
+    testing.assertThrows("residueFrequencyOfEmpty", "bioinformatics");
+}
+
+func residueFrequencyOfEmpty() {
+    residueFrequency("");
 }
 
 # ------------------------------------------------------------------ GC content
@@ -144,9 +172,8 @@ func testProteinMassConvention() {
 }
 
 func testProteinMassGrowsWithLength() {
-    testing.assertTrue(molecularWeight(INS_PROTEIN, PROTEIN) > molecularWeight(
-        INS_PROTEIN[0..12],
-        PROTEIN));
+    testing.assertTrue(molecularWeight(INS_PROTEIN, PROTEIN) >
+        molecularWeight(INS_PROTEIN[0..12], PROTEIN));
 }
 
 func testDnaMass() {
