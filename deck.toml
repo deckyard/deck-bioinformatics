@@ -1,15 +1,15 @@
 [package]
-name = "@jennifer/bioinformatics"
-version = "0.1.0"
+name = "@deckyard/bioinformatics"
+version = "0.2.0-dev"
 description = "sequence manipulation for DNA, RNA and protein"
 license = "LGPL-3.0-only"
-authors = ["mplx <jennifer@mplx.dev>"]
+authors = ["mplx <mplx@jennifer-lang.dev>"]
 keywords = ["bioinformatics", "dna", "rna", "protein", "sequence", "fasta", "alignment"]
 
 [package.urls]
-deck = "https://raw.githubusercontent.com/jennifer-language/deck-bioinformatics/main/deck.toml"
-homepage = "https://github.com/jennifer-language/deck-bioinformatics"
-manual = "https://jennifer-language.github.io/deck-bioinformatics/"
+deck = "https://raw.githubusercontent.com/deckyard/deck-bioinformatics/main/deck.toml"
+homepage = "https://github.com/deckyard/deck-bioinformatics"
+manual = "https://deckyard.github.io/deck-bioinformatics/"
 
 [engines]
 jennifer = ">=0.25.0"

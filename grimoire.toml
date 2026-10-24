@@ -3,7 +3,7 @@
 # .github/workflows/docs.yml on every push to main.
 
 [book]
-title = "@jennifer/bioinformatics"
+title = "@deckyard/bioinformatics"
 description = "Sequence manipulation for DNA, RNA and protein, in Jennifer."
 language = "en"
 src = "docs"
@@ -17,9 +17,10 @@ theme = "nordic"
 mode = "auto"
 tocDepth = 3
 sectionNumbers = true
-repoUrl = "https://github.com/jennifer-language/deck-bioinformatics"
+repoUrl = "https://github.com/deckyard/deck-bioinformatics"
 repoLabel = "Source"
-editUrl = "https://github.com/jennifer-language/deck-bioinformatics/edit/main/docs/{path}"
+editUrl = "https://github.com/deckyard/deck-bioinformatics/edit/main/docs/{path}"
+footer = 'Part of <a href="https://github.com/deckyard">Deckyard</a>, community decks for Jennifer. Rendered with <a href="https://grimoire.jennifer-lang.dev/">Grimoire</a>.'
 
 [highlight]
 enabled = true
