@@ -61,4 +61,4 @@ jennifer run .grimoire/bin/grimoire serve
 
 ## Licence
 
-LGPL-3.0-only, see [LICENSE](LICENSE).
+LGPL-3.0-only, see [LICENSE](LICENSE). Copyright (C) 2026 mplx &lt;mplx@jennifer-lang.dev&gt;.

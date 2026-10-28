@@ -115,14 +115,14 @@ sequence's length, O(n*m) time, and no `maxCells` limit.
 
 ## Performance and the memory limit
 
-Alignment is the deck's one O(n*m) surface: about 70 000 cells a second.
+Alignment is the deck's one O(n*m) surface: about 380 000 cells a second.
 
 | | cells | time |
 | - | - | - |
-| 50 x 50 | 2 500 | 86 ms |
-| 100 x 100 | 10 000 | 150 ms |
-| 200 x 200 | 40 000 | 458 ms |
-| 400 x 400 | 160 000 | 2.28 s |
+| 50 x 50 | 2 500 | 8 ms |
+| 100 x 100 | 10 000 | 31 ms |
+| 200 x 200 | 40 000 | 120 ms |
+| 400 x 400 | 160 000 | 420 ms |
 
 Memory runs out first: every matrix entry is a boxed interpreter value, about a
 kilobyte per cell.

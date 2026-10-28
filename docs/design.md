@@ -48,15 +48,15 @@ Everything else is linear in sequence length.
 
 | | cells | |
 | - | - | - |
-| 50 x 50 | 2 500 | 86 ms |
-| 100 x 100 | 10 000 | 150 ms |
-| 200 x 200 | 40 000 | 458 ms |
-| 400 x 400 | 160 000 | 2.28 s |
+| 50 x 50 | 2 500 | 8 ms |
+| 100 x 100 | 10 000 | 31 ms |
+| 200 x 200 | 40 000 | 120 ms |
+| 400 x 400 | 160 000 | 420 ms |
 
-About 70 000 cells a second: linear in cells, so quadratic in sequence length. A
-few hundred residues a side is comfortable; a chromosome is out of scope. The
-50 x 50 row is mostly fixed overhead with run-to-run spread wider than the
-measurement; the linear shape shows from 100 x 100 on. Memory and the
+About 380 000 cells a second: linear in cells, so quadratic in sequence length.
+A few hundred residues a side is comfortable; a chromosome is out of scope. The
+50 x 50 row carries some fixed overhead; the linear shape shows from 100 x 100
+on. Memory and the
 `maxCells` guard are in [Comparison](compare.md#performance-and-the-memory-limit).
 
 The DP matrix is a flat `list of int` indexed `i * width + j`, and substitution
