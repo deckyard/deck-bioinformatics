@@ -1,6 +1,6 @@
 [package]
 name = "@deckyard/bioinformatics"
-version = "0.2.0-dev"
+version = "0.2.0"
 description = "sequence manipulation for DNA, RNA and protein"
 license = "LGPL-3.0-only"
 authors = ["mplx <mplx@jennifer-lang.dev>"]

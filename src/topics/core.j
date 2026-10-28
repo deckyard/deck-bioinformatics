@@ -324,6 +324,11 @@ func isAll(s as string, admits as list of bool) {
  * @internal
  */
 func normalizeBy(s as string, admits as list of bool, what as string) {
+    # Input that is already clean (only admitted residues, no case or spacing
+    # to fix) is returned as is after one native match.
+    if (len($s) > 0 and regex.matches(admittedPattern($admits), $s)) {
+        return $s;
+    }
     def buf as bytes init convert.bytesFromString($s, "utf-8");
     def n as int init len($buf);
     def out as bytes;
@@ -362,6 +367,29 @@ func normalizeBy(s as string, admits as list of bool, what as string) {
         raiseError("empty " + $what + " sequence");
     }
     return convert.stringFromBytes($out, "utf-8");
+}
+
+/**
+ * An anchored pattern matching a string made only of admitted characters.
+ *
+ * @param admits {list of bool} the alphabet, indexed by byte
+ * @return {string} the pattern
+ * @internal
+ */
+func admittedPattern(admits as list of bool) {
+    def cls as string init "";
+    for (def code as int init 0; $code < 128; $code = $code + 1) {
+        if ($admits[$code]) {
+            def one as bytes;
+            $one[] = $code;
+            def c as string init convert.stringFromBytes($one, "utf-8");
+            if (not (($code >= 65 and $code <= 90) or ($code >= 97 and $code <= 122))) {
+                $c = "\\" + $c;
+            }
+            $cls = $cls + $c;
+        }
+    }
+    return "^[" + $cls + "]+$";
 }
 
 /**

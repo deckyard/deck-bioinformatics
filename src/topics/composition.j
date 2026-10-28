@@ -50,12 +50,23 @@ export func residueCount(p as string) {
  * @internal
  */
 func countResidues(clean as string) {
+    # Validated input is ASCII, so the tally is a list indexed by byte and only
+    # the residues seen become map entries.
+    def tally as list of int;
+    for (def i as int init 0; $i < 128; $i = $i + 1) {
+        $tally[] = 0;
+    }
+    def buf as bytes init convert.bytesFromString($clean, "utf-8");
+    def n as int init len($buf);
+    for (def i as int init 0; $i < $n; $i = $i + 1) {
+        $tally[$buf[$i]] = $tally[$buf[$i]] + 1;
+    }
     def out as map of string to int;
-    for (def residue in strings.chars($clean)) {
-        if (maps.has($out, $residue)) {
-            $out[$residue] = $out[$residue] + 1;
-        } else {
-            $out[$residue] = 1;
+    for (def code as int init 0; $code < 128; $code = $code + 1) {
+        if ($tally[$code] > 0) {
+            def one as bytes;
+            $one[] = $code;
+            $out[convert.stringFromBytes($one, "utf-8")] = $tally[$code];
         }
     }
     return $out;
@@ -414,7 +425,8 @@ func requireUnambiguousDna(s as string) {
  */
 export func netCharge(p as string, ph as float) {
     def clean as string init requireProtein($p);
-    return chargeOfCounts(ionisableCounts($clean), $ph);
+    def counts as list of int init ionisableCounts($clean);
+    return chargeOfCounts($counts, presentCodes($counts), $ph);
 }
 
 /**
@@ -455,19 +467,17 @@ func ionisableCounts(clean as string) {
  * The net charge implied by a tally of ionisable residues.
  *
  * @param counts {list of int} counts indexed by residue byte value
+ * @param present {list of int} the codes to charge (`presentCodes`)
  * @param ph {float} the pH to evaluate at
  * @return {float} the net charge
  * @internal
  */
-func chargeOfCounts(counts as list of int, ph as float) {
+func chargeOfCounts(counts as list of int, present as list of int, ph as float) {
     def nTerminus as float init 1.0 / (1.0 + math.pow(10.0, $ph - PKA_N_TERMINUS));
     def cTerminus as float init 1.0 / (1.0 + math.pow(10.0, PKA_C_TERMINUS - $ph));
     def charge as float init $nTerminus - $cTerminus;
-    for (def code as int init 0; $code < 128; $code = $code + 1) {
+    for (def code in $present) {
         def many as int init $counts[$code];
-        if ($many == 0) {
-            continue;
-        }
         def sign as int init CHARGE_BY_CODE[$code];
         def acidity as float init PKA_BY_CODE[$code];
         if ($sign > 0) {
@@ -477,6 +487,23 @@ func chargeOfCounts(counts as list of int, ph as float) {
         }
     }
     return $charge;
+}
+
+/**
+ * The residue codes a tally counts at least once.
+ *
+ * @param counts {list of int} counts indexed by residue byte value
+ * @return {list of int} the codes with a non-zero count
+ * @internal
+ */
+func presentCodes(counts as list of int) {
+    def out as list of int;
+    for (def code as int init 0; $code < 128; $code = $code + 1) {
+        if ($counts[$code] > 0) {
+            $out[] = $code;
+        }
+    }
+    return $out;
 }
 
 /**
@@ -495,12 +522,13 @@ func chargeOfCounts(counts as list of int, ph as float) {
 export func isoelectricPoint(p as string) {
     def clean as string init requireProtein($p);
     def counts as list of int init ionisableCounts($clean);
+    def present as list of int init presentCodes($counts);
     def low as float init 0.0;
     def high as float init 14.0;
     def mid as float init 7.0;
     for (def i as int init 0; $i < 100; $i = $i + 1) {
         $mid = ($low + $high) / 2.0;
-        def charge as float init chargeOfCounts($counts, $mid);
+        def charge as float init chargeOfCounts($counts, $present, $mid);
         if (math.abs($charge) < 0.0001) {
             return $mid;
         }

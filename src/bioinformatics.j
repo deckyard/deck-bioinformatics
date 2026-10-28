@@ -42,6 +42,7 @@ use binary;
 use io;
 use strings;
 use math;
+use regex;
 
 # Reference data first: the generated *data.j files declare the tables that the
 # hand-written topic files immediately above them read.

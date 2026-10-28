@@ -10,11 +10,11 @@
 # precomputed into a map keyed by the two bytes, so the inner loop builds no
 # string and calls no helper.
 #
-# Measured (examples/bench.j): about 70 000 cells a second; 200 x 200 under half
-# a second, 400 x 400 a little over two. Memory binds first: about one kilobyte
-# per cell, because every entry is a boxed interpreter value. 700 x 700 measured
-# 570 MB resident, so 1000 x 1000 is about a gigabyte and 2000 x 2000 an
-# out-of-memory kill. Hence `AlignOptions.maxCells`, on by default. Whole-genome
+# Measured (examples/bench.j): about 380 000 cells a second; 200 x 200 about an
+# eighth of a second, 400 x 400 under half a second. Memory binds first: about
+# one kilobyte per cell, because every entry is a boxed interpreter value.
+# 700 x 700 measured 570 MB resident, so 1000 x 1000 is about a gigabyte and
+# 2000 x 2000 an out-of-memory kill. Hence `AlignOptions.maxCells`, on by default. Whole-genome
 # throughput is out of scope.
 #
 # Gap scoring is linear; affine gaps are not implemented.
@@ -204,16 +204,14 @@ func align(a as string, b as string, opts as AlignOptions, local as bool) {
     def gap as int init $opts.gapScore;
     def scores as map of int to int init pairScores($left, $right, $opts);
 
+    # Row 0 is laid down here; each later row is appended cell by cell below,
+    # so the matrix is never filled with zeroes only to be overwritten.
     def dp as list of int;
-    for (def i as int init 0; $i < ($n + 1) * $width; $i = $i + 1) {
-        $dp[] = 0;
-    }
-    if (not $local) {
-        for (def i as int init 1; $i <= $n; $i = $i + 1) {
-            $dp[$i * $width] = $i * $gap;
-        }
-        for (def j as int init 1; $j <= $m; $j = $j + 1) {
-            $dp[$j] = $j * $gap;
+    for (def j as int init 0; $j <= $m; $j = $j + 1) {
+        if ($local) {
+            $dp[] = 0;
+        } else {
+            $dp[] = $j * $gap;
         }
     }
 
@@ -232,6 +230,11 @@ func align(a as string, b as string, opts as AlignOptions, local as bool) {
         # seventy lines of machinery for nothing measurable is a bad trade, and
         # the DP loop is otherwise already at the interpreter's floor.
         def fixed as int init $ax[$i - 1] * 256;
+        if ($local) {
+            $dp[] = 0;
+        } else {
+            $dp[] = $i * $gap;
+        }
         for (def j as int init 1; $j <= $m; $j = $j + 1) {
             def best as int init $dp[$previous + $j - 1] + $scores[$fixed + $bx[$j - 1]];
             def up as int init $dp[$previous + $j] + $gap;
@@ -245,7 +248,7 @@ func align(a as string, b as string, opts as AlignOptions, local as bool) {
             if ($local and $best < 0) {
                 $best = 0;
             }
-            $dp[$row + $j] = $best;
+            $dp[] = $best;
             if ($local and $best > $bestScore) {
                 $bestScore = $best;
                 $bestI = $i;
@@ -309,13 +312,31 @@ func requireAlignable(n as int, m as int, maxCells as int) {
 func pairScores(a as string, b as string, opts as AlignOptions) {
     def useMatrix as bool init len($opts.matrix) > 0;
     def out as map of int to int;
-    for (def x in strings.chars($a)) {
-        for (def y in strings.chars($b)) {
+    for (def x in distinctChars($a)) {
+        for (def y in distinctChars($b)) {
             def key as int init convert.bytesFromString($x, "utf-8")[0] * 256 +
                 convert.bytesFromString($y, "utf-8")[0];
             if (not maps.has($out, $key)) {
                 $out[$key] = pairScore($x, $y, $opts, $useMatrix);
             }
+        }
+    }
+    return $out;
+}
+
+/**
+ * The distinct characters of a sequence, in first-seen order.
+ *
+ * @param s {string} the sequence
+ * @return {list of string} each character once
+ */
+func distinctChars(s as string) {
+    def seen as map of string to bool init {};
+    def out as list of string init [];
+    for (def c in strings.chars($s)) {
+        if (not maps.has($seen, $c)) {
+            $seen[$c] = true;
+            $out[] = $c;
         }
     }
     return $out;
