@@ -158,15 +158,10 @@ func scanExact(subject as string, needle as string, strand as int) {
     def out as list of Match;
     def offset as int init 0;
     while ($offset + $m <= $n) {
-        def rest as bytes init $hay;
-        if ($offset > 0) {
-            $rest = binary.slice($hay, $offset, $n);
-        }
-        def at as int init binary.indexOf($rest, $pin);
-        if ($at < 0) {
+        def start as int init binary.indexOf($hay, $pin, $offset);
+        if ($start < 0) {
             break;
         }
-        def start as int init $offset + $at;
         $out[] = Match{
             start: $start,
             end: $start + $m,
