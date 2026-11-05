@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - table data: the reference data the rest of the deck reads.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -2158,6 +2158,13 @@ def const NUCLEOTIDE_ADMITS as list of bool init [
     false,
     false
 ];
+
+# The *_ADMITS alphabets as anchored patterns: a string matching one is
+# already clean (admitted uppercase residues only). Read by normalizeBy.
+def const DNA_ADMITS_PATTERN as string init '^[ACGTRYSWKMBDHVN]+$';
+def const RNA_ADMITS_PATTERN as string init '^[ACGURYSWKMBDHVN]+$';
+def const PROTEIN_ADMITS_PATTERN as string init '^[ACDEFGHIKLMNPQRSTVWYBZXJUO\*]+$';
+def const NUCLEOTIDE_ADMITS_PATTERN as string init '^[ACGTURYSWKMBDHVN]+$';
 
 # Residue properties by byte value, for gravy / molecularWeight / netCharge.
 # A residue with no entry reads as the zero value, so callers must still ask

@@ -41,7 +41,7 @@ The examples in this repository import `../src/bioinformatics.j` the same way.
 
 | | |
 | - | - |
-| Jennifer | `>=0.25.0` |
+| Jennifer | `>=0.26.0` |
 | Deck dependencies | none |
 | Capabilities | none (no `net`, `exec` or filesystem) |
 | Builds | `jennifer` and `jennifer-tiny`, both listed in `[engines]` |

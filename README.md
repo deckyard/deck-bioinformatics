@@ -22,7 +22,7 @@ jvc add @deckyard/bioinformatics
 
 This vendors the deck to `vendor/deckyard/bioinformatics/`. Without `jvc`, unpack
 the `src/` subtree of a release archive
-(`deckyard-bioinformatics-<version>.tar.gz`) there. Requires Jennifer 0.25.0 or
+(`deckyard-bioinformatics-<version>.tar.gz`) there. Requires Jennifer 0.26.0 or
 newer; no deck dependencies.
 
 ## Usage
