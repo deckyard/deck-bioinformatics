@@ -40,6 +40,30 @@ func testAlphabetsAgree() {
     testing.assertTrue(sameCodes($union, NUCLEOTIDE_CODES));
 }
 
+# The validation loops read the generated `*_ADMITS` lists in tabledata.j, not
+# the `*_CODES` maps; turn a list back into the set of byte codes it admits.
+func admittedCodes(admits as list of bool) {
+    def out as map of int to bool;
+    for (def i as int init 0; $i < len($admits); $i = $i + 1) {
+        if ($admits[$i]) {
+            $out[$i] = true;
+        }
+    }
+    return $out;
+}
+
+func testAdmitsAgreeWithCodes() {
+    testing.assertTrue(sameCodes(DNA_CODES, admittedCodes(DNA_ADMITS)));
+    testing.assertTrue(sameCodes(RNA_CODES, admittedCodes(RNA_ADMITS)));
+    testing.assertTrue(sameCodes(PROTEIN_CODES, admittedCodes(PROTEIN_ADMITS)));
+    testing.assertTrue(sameCodes(NUCLEOTIDE_CODES, admittedCodes(NUCLEOTIDE_ADMITS)));
+    # isAll / normalizeBy index the list with any byte below 128.
+    testing.assertEqual(len(DNA_ADMITS), 128);
+    testing.assertEqual(len(RNA_ADMITS), 128);
+    testing.assertEqual(len(PROTEIN_ADMITS), 128);
+    testing.assertEqual(len(NUCLEOTIDE_ADMITS), 128);
+}
+
 func testAlphabetShapes() {
     # four bases plus eleven IUPAC ambiguity codes
     testing.assertEqual(len(DNA_ALPHABET), 15);

@@ -56,10 +56,12 @@ export def const RNA_ALPHABET as string init "ACGURYSWKMBDHVN";
  */
 export def const PROTEIN_ALPHABET as string init "ACDEFGHIKLMNPQRSTVWYBZXJUO*";
 
-# Byte-code membership sets for the alphabets above, keyed by ASCII code so a
-# per-residue loop can test a byte without materialising a one-character string.
-# `testAlphabetsAgree` in core_test.j derives these from the alphabet strings and
-# fails if the two ever drift apart, so the codes below cannot go stale silently.
+# Byte-code membership sets for the alphabets above, keyed by ASCII code. The
+# per-residue validation loops do not read these: they index the generated
+# `*_ADMITS` lists in tabledata.j, which are cheaper. These maps are the
+# reference the tests hold both sides to: `testAlphabetsAgree` in core_test.j
+# derives them from the alphabet strings and `testAdmitsAgreeWithCodes` checks
+# the `*_ADMITS` lists against them, so neither copy can go stale silently.
 #
 #   A 65   B 66   C 67   D 68   E 69   F 70   G 71   H 72   I 73   J 74
 #   K 75   L 76   M 77   N 78   O 79   P 80   Q 81   R 82   S 83   T 84
