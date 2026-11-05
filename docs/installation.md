@@ -46,9 +46,9 @@ The examples in this repository import `../src/bioinformatics.j` the same way.
 | Capabilities | none (no `net`, `exec` or filesystem) |
 | Builds | `jennifer` and `jennifer-tiny`, both listed in `[engines]` |
 
-The floor comes from the `math` functions the thermodynamic and pI formulas need
-(`math.ln`, `math.pow`). The deck also uses `strings`, `maps`, `convert`,
-`binary` and `io`.
+The floor comes from `decimal` (0.26), which `cpgIslands` uses to compare its
+thresholds exactly. The deck also uses `math`, `strings`, `maps`, `lists`,
+`regex`, `convert`, `binary` and `io`.
 
 ## Checking it works
 
