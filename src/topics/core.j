@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - core: alphabets, validation, and the byte-loop conventions every
 # other topic is built on. Spliced into bioinformatics.j via include - not a standalone
@@ -320,15 +320,19 @@ func isAll(s as string, admits as list of bool) {
  *
  * @param s {string} the sequence as the caller supplied it
  * @param admits {list of bool} membership by ASCII code
+ * @param pattern {string} the same alphabet as an anchored pattern, one of the
+ *        generated `*_ADMITS_PATTERN` constants
  * @param what {string} alphabet name, used in the error message
  * @return {string} the cleaned, uppercased sequence
  * @throws {Error} kind "bioinformatics" when empty or carrying a foreign character
  * @internal
  */
-func normalizeBy(s as string, admits as list of bool, what as string) {
+func normalizeBy(s as string, admits as list of bool, pattern as string, what as string) {
     # Input that is already clean (only admitted residues, no case or spacing
-    # to fix) is returned as is after one native match.
-    if (len($s) > 0 and regex.matches(admittedPattern($admits), $s)) {
+    # to fix) is returned as is after one native match. The pattern is a
+    # generated constant: building it from `admits` per call cost about 130 us,
+    # more than the match on any short input.
+    if (len($s) > 0 and regex.matches($pattern, $s)) {
         return $s;
     }
     def buf as bytes init convert.bytesFromString($s, "utf-8");
@@ -372,29 +376,6 @@ func normalizeBy(s as string, admits as list of bool, what as string) {
 }
 
 /**
- * An anchored pattern matching a string made only of admitted characters.
- *
- * @param admits {list of bool} the alphabet, indexed by byte
- * @return {string} the pattern
- * @internal
- */
-func admittedPattern(admits as list of bool) {
-    def cls as string init "";
-    for (def code as int init 0; $code < 128; $code = $code + 1) {
-        if ($admits[$code]) {
-            def one as bytes;
-            $one[] = $code;
-            def c as string init convert.stringFromBytes($one, "utf-8");
-            if (not (($code >= 65 and $code <= 90) or ($code >= 97 and $code <= 122))) {
-                $c = "\\" + $c;
-            }
-            $cls = $cls + $c;
-        }
-    }
-    return "^[" + $cls + "]+$";
-}
-
-/**
  * The message for a character that is not a residue of the expected alphabet.
  *
  * @param code {int} the offending byte
@@ -417,7 +398,7 @@ func foreignCharacter(code as int, at as int, what as string) {
  * @internal
  */
 func requireDna(s as string) {
-    return normalizeBy($s, DNA_ADMITS, "DNA");
+    return normalizeBy($s, DNA_ADMITS, DNA_ADMITS_PATTERN, "DNA");
 }
 
 /**
@@ -429,7 +410,7 @@ func requireDna(s as string) {
  * @internal
  */
 func requireRna(s as string) {
-    return normalizeBy($s, RNA_ADMITS, "RNA");
+    return normalizeBy($s, RNA_ADMITS, RNA_ADMITS_PATTERN, "RNA");
 }
 
 /**
@@ -444,7 +425,7 @@ func requireRna(s as string) {
  * @internal
  */
 func requireNucleotide(s as string) {
-    return normalizeBy($s, NUCLEOTIDE_ADMITS, "nucleotide");
+    return normalizeBy($s, NUCLEOTIDE_ADMITS, NUCLEOTIDE_ADMITS_PATTERN, "nucleotide");
 }
 
 /**
@@ -456,7 +437,7 @@ func requireNucleotide(s as string) {
  * @internal
  */
 func requireProtein(s as string) {
-    return normalizeBy($s, PROTEIN_ADMITS, "protein");
+    return normalizeBy($s, PROTEIN_ADMITS, PROTEIN_ADMITS_PATTERN, "protein");
 }
 
 /**
@@ -473,7 +454,7 @@ func requireProtein(s as string) {
  * @internal
  */
 func requireSequence(s as string) {
-    return normalizeBy($s, PROTEIN_ADMITS, "sequence");
+    return normalizeBy($s, PROTEIN_ADMITS, PROTEIN_ADMITS_PATTERN, "sequence");
 }
 
 /**

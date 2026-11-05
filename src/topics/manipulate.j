@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - manipulate: generating, shuffling, mutating and slicing sequences.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -139,9 +139,13 @@ func randomFrom(n as int, alphabet as string) {
 /**
  * Draw `n` residues from an alphabet according to relative weights.
  *
- * Builds a cumulative distribution once, then does one `math.rand` and a linear
- * walk per residue. The alphabet is at most twenty entries, so the walk is
- * cheaper than the arithmetic a binary search would need.
+ * Weights are divided by the largest first, so their sum is at most the
+ * alphabet size and cannot overflow whatever magnitudes the caller used. The
+ * cumulative distribution is built in alphabet order, not map order, so a seed
+ * gives the same draws for the same weights however the map was assembled.
+ * Then one `math.rand` and a linear walk per residue: the alphabet is at most
+ * twenty entries, so the walk is cheaper than the arithmetic a binary search
+ * would need.
  *
  * @param n {int} how many residues to draw
  * @param weights {map of string to float} residue -> relative frequency
@@ -152,31 +156,42 @@ func randomFrom(n as int, alphabet as string) {
  */
 func randomWeighted(n as int, weights as map of string to float, alphabet as string) {
     requirePositiveLength($n);
-    def total as float init 0.0;
+    def largest as float init 0.0;
     for (def residue in $weights) {
-        if (not strings.contains($alphabet, $residue)) {
-            raiseError("'" + $residue + "' is not one of the residues this verb" + " generates (" +
-                $alphabet + ")");
+        if (len($residue) != 1 or not strings.contains($alphabet, $residue)) {
+            raiseError("'" + $residue + "' is not one of the residues this verb generates (" +
+                $alphabet + "); each key is a single residue");
         }
         if ($weights[$residue] < 0.0) {
             raiseError("weight for '" + $residue + "' is negative");
         }
-        $total = $total + $weights[$residue];
+        if ($weights[$residue] > $largest) {
+            $largest = $weights[$residue];
+        }
     }
-    if ($total <= 0.0) {
+    if ($largest <= 0.0) {
         raiseError("at least one weight must be greater than zero");
     }
 
     # cumulative distribution, parallel lists so the draw is two indexed reads
+    def pool as bytes init convert.bytesFromString($alphabet, "utf-8");
+    def scaled as list of float;
     def codes as list of int;
-    def cumulative as list of float;
-    def running as float init 0.0;
-    for (def residue in $weights) {
-        if ($weights[$residue] <= 0.0) {
+    def total as float init 0.0;
+    for (def k as int init 0; $k < len($pool); $k = $k + 1) {
+        def residue as string init $alphabet[$k..$k + 1];
+        if (not maps.has($weights, $residue) or $weights[$residue] <= 0.0) {
             continue;
         }
-        $running = $running + $weights[$residue] / $total;
-        $codes[] = convert.bytesFromString($residue, "utf-8")[0];
+        def w as float init $weights[$residue] / $largest;
+        $scaled[] = $w;
+        $codes[] = $pool[$k];
+        $total = $total + $w;
+    }
+    def cumulative as list of float;
+    def running as float init 0.0;
+    for (def w in $scaled) {
+        $running = $running + $w / $total;
         $cumulative[] = $running;
     }
 

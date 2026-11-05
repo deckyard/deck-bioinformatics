@@ -33,7 +33,7 @@ one window raises.
 ## Molecular weight
 
 ```jennifer
-bioseq.molecularWeight("ATGC", bioseq.DNA);       # 1173.83
+bioseq.molecularWeight("ATGC", bioseq.DNA);       # 1173.82528
 bioseq.molecularWeight($rna, bioseq.RNA);
 bioseq.molecularWeight($protein, bioseq.PROTEIN);
 ```
@@ -66,7 +66,14 @@ bases; on longer sequences it returns a number with no physical meaning.
 dinucleotides, with helix initiation per terminal base, a salt correction and a
 self-complementarity correction, then `Tm = dH / (dS + R ln(Ct/4)) - 273.15`.
 Needs at least two bases; concentrations must be positive (`primerNm` in nM,
-`saltMm` in mM). Other parameter sets differ by a degree or two.
+`saltMm` in mM). Conditions that put Tm at or below 0 K (a primer
+concentration large enough to make `dS + R ln(Ct/4)` non-negative), or a
+concentration that underflows to 0 once converted to molar, raise. Other
+parameter sets differ by a degree or two.
+
+Ambiguity-code errors from the Tm and mass verbs give the code's 0-based byte
+offset in the input as given, like every other validation error:
+`meltingTemp("AC GN")` names `'N' at position 4`.
 
 Order matters to the stacking model, not to Wallace:
 
@@ -88,7 +95,9 @@ All four raise on an empty or non-protein sequence; the first three also on
 `B`, `Z`, `X`, `J` or `*`.
 
 **Net charge** sums the fractional charge of the two termini and the side chains
-of D, E, C, Y (acidic) and H, K, R (basic). It decreases monotonically with pH.
+of D, E, C, Y (acidic) and H, K, R (basic). It decreases monotonically with pH. Any
+finite pH is accepted: far outside 0 to 14 the fractions saturate (all acids
+charged above, all bases below) instead of overflowing.
 
 **Isoelectric point**: bisection on the net charge over pH 0 to 14, stopping
 within 1e-4 of zero or after 100 steps. The pKa values are the EMBOSS `iep` set

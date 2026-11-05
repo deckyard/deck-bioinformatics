@@ -60,7 +60,8 @@ bioseq.translate("NNN");   # "X"
 ### Other genetic codes
 
 `translateWith` takes a codon table. The nine tables are listed in
-[Genetic codes](tables.md#genetic-codes).
+[Genetic codes](tables.md#genetic-codes). A hand-built table is checked once per call: every
+value must be a single ASCII residue, or the verb raises before translating.
 
 ```jennifer
 bioseq.translate("TGA");                                        # "*"
@@ -108,7 +109,9 @@ bioseq.oneToThree("X");           # "Xaa"
 bioseq.oneToThree("BZJ");         # "AsxGlxXle"
 ```
 
-`threeToOne` accepts codes run together or separated by spaces or hyphens.
+`threeToOne` accepts codes run together or separated by spaces or hyphens. An
+unknown group or a non-ASCII byte raises with its 0-based byte offset in the
+input as given.
 Ambiguity codes and the stop have three-letter spellings (`THREE_LETTER`), so
 any `translate` output round-trips.
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - formats: FASTA and FASTQ, over strings.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -102,6 +102,9 @@ func splitLines(text as string) {
  * @internal
  */
 func stripSpace(line as string) {
+    if (not regex.matches('[ \t]', $line)) {
+        return $line;
+    }
     def buf as bytes init convert.bytesFromString($line, "utf-8");
     def n as int init len($buf);
     def out as bytes;
@@ -134,14 +137,12 @@ func splitHeader(header as string, marker as string) {
     if (len($trimmed) == 0) {
         raiseError("a '" + $marker + "' header line carries no identifier");
     }
-    def cut as int init -1;
-    def buf as bytes init convert.bytesFromString($trimmed, "utf-8");
-    def n as int init len($buf);
-    for (def i as int init 0; $i < $n; $i = $i + 1) {
-        if ($buf[$i] == 32 or $buf[$i] == 9) {
-            $cut = $i;
-            break;
-        }
+    # `indexOf` and string slices both count runes, so a non-ASCII id cuts at
+    # the right place.
+    def cut as int init strings.indexOf($trimmed, " ");
+    def tab as int init strings.indexOf($trimmed, "\t");
+    if ($tab >= 0 and ($cut < 0 or $tab < $cut)) {
+        $cut = $tab;
     }
     def out as list of string;
     if ($cut < 0) {
@@ -161,7 +162,7 @@ func splitHeader(header as string, marker as string) {
  *
  * Accepts wrapped sequence lines, blank lines between records, CRLF line endings
  * and a description after the id. Spaces and tabs inside sequence lines are
- * dropped. Only structure is checked: residues are not validated against an
+ * dropped, and lines starting with `;` (comments) are skipped. Only structure is checked: residues are not validated against an
  * alphabet, and case is preserved (lowercase is soft-masking).
  *
  * A header with no sequence lines gives an empty `sequence`, not an error. At
@@ -174,37 +175,58 @@ func splitHeader(header as string, marker as string) {
  * @example bioseq.parseFasta(">seq1 first\nATGC\n")[0].id == "seq1"
  */
 export func parseFasta(text as string) {
+    return parseFastaUpTo($text, MAX_RECORDS);
+}
+
+/**
+ * `parseFasta` with the record cap as a parameter, so a test can reach it.
+ *
+ * Sequence lines are collected per record and joined once: appending each line
+ * to a growing string recopies it and made an 800 kb record take five seconds.
+ *
+ * @param text {string} the contents of a FASTA file
+ * @param limit {int} the most records to build
+ * @return {list of Record} the records, in file order
+ * @throws {Error} kind "bioinformatics" as for `parseFasta`, past `limit` records
+ * @internal
+ */
+func parseFastaUpTo(text as string, limit as int) {
     def out as list of Record;
     def id as string init "";
     def description as string init "";
-    def sequence as string init "";
+    def pieces as list of string;
     def inRecord as bool init false;
 
     for (def line in splitLines($text)) {
-        if (len(strings.trim($line)) == 0) {
+        def trimmed as string init strings.trim($line);
+        if (len($trimmed) == 0 or strings.startsWith($trimmed, ";")) {
             continue;
         }
         if (strings.startsWith($line, ">")) {
             if ($inRecord) {
-                requireRoom(len($out) + 1, "FASTA records");
-                $out[] = Record{id: $id, description: $description, sequence: $sequence};
+                requireRoom(len($out) + 1, $limit, "FASTA records");
+                $out[] = Record{
+                    id: $id,
+                    description: $description,
+                    sequence: strings.join($pieces, "")
+                };
             }
             def parts as list of string init splitHeader($line[1..], ">");
             $id = $parts[0];
             $description = $parts[1];
-            $sequence = "";
+            $pieces = [];
             $inRecord = true;
         } else {
             if (not $inRecord) {
                 raiseError("FASTA data before the first '>' header line" +
                     " (is this a plain sequence? use toPlain)");
             }
-            $sequence = $sequence + stripSpace($line);
+            $pieces[] = stripSpace($line);
         }
     }
     if ($inRecord) {
-        requireRoom(len($out) + 1, "FASTA records");
-        $out[] = Record{id: $id, description: $description, sequence: $sequence};
+        requireRoom(len($out) + 1, $limit, "FASTA records");
+        $out[] = Record{id: $id, description: $description, sequence: strings.join($pieces, "")};
     }
     if (len($out) == 0) {
         raiseError("no FASTA records found (a record starts with '>')");
@@ -215,11 +237,13 @@ export func parseFasta(text as string) {
 /**
  * Render records as FASTA text, wrapped at `FASTA_WIDTH` (60) columns.
  *
- * A record with an empty sequence is written as its header line alone.
+ * A record with an empty sequence is written as its header line alone. Fields
+ * that would not parse back to the same record raise: see `writeFastaWrapped`.
  *
  * @param records {list of Record} the records to write
  * @return {string} FASTA text, ending in a newline
- * @throws {Error} kind "bioinformatics" when the list is empty or a record has no id
+ * @throws {Error} kind "bioinformatics" when the list is empty or a record has no id,
+ *         a field that cannot be written (see `writeFastaWrapped`)
  * @example bioseq.writeFasta([$r]) == ">seq1 first\nATGC\n"
  */
 export func writeFasta(records as list of Record) {
@@ -229,11 +253,16 @@ export func writeFasta(records as list of Record) {
 /**
  * Render records as FASTA text at a chosen line width.
  *
+ * The id is written trimmed. Output parses back to the same records, so a
+ * field that would break that raises: whitespace in the id, a CR or LF in the
+ * description, whitespace, `>` or `;` in the sequence (a wrapped line starting
+ * with `>` or `;` reads back as a header or a comment).
+ *
  * @param records {list of Record} the records to write
  * @param width {int} the wrap column; must be positive
  * @return {string} FASTA text, ending in a newline
  * @throws {Error} kind "bioinformatics" when the list is empty, the width is not
- *         positive, or a record has no id
+ *         positive, a record has no id, or a field holds a character listed above
  */
 export func writeFastaWrapped(records as list of Record, width as int) {
     if (len($records) == 0) {
@@ -242,21 +271,55 @@ export func writeFastaWrapped(records as list of Record, width as int) {
     if ($width <= 0) {
         raiseError("FASTA line width must be positive, got " + convert.toString($width));
     }
-    def out as string init "";
+    # Pieces are collected and joined once; `+` onto the growing output
+    # recopied it per record (8000 records took eleven seconds).
+    def out as list of string;
     for (def r in $records) {
-        if (len(strings.trim($r.id)) == 0) {
-            raiseError("a record has no id, so it cannot be written as FASTA");
+        def id as string init requireWritableHeader($r.id, $r.description, "record", "FASTA");
+        if (regex.matches('[\s>;]', $r.sequence)) {
+            raiseError("record '" + $id + "' has whitespace, '>' or ';' in its sequence," +
+                " which would not parse back as the same record");
         }
-        $out = $out + ">" + $r.id;
+        $out[] = ">";
+        $out[] = $id;
         if (len($r.description) > 0) {
-            $out = $out + " " + $r.description;
+            $out[] = " ";
+            $out[] = $r.description;
         }
-        $out = $out + "\n";
+        $out[] = "\n";
         if (len($r.sequence) > 0) {
-            $out = $out + wrap($r.sequence, $width) + "\n";
+            $out[] = wrap($r.sequence, $width);
+            $out[] = "\n";
         }
     }
-    return $out;
+    return strings.join($out, "");
+}
+
+/**
+ * Check a record's id and description before writing its header line.
+ *
+ * @param id {string} the id as given
+ * @param description {string} the description
+ * @param what {string} "record" or "read", for the message
+ * @param format {string} "FASTA" or "FASTQ", for the message
+ * @return {string} the trimmed id, the one that is written
+ * @throws {Error} kind "bioinformatics" when the id is empty or holds whitespace,
+ *         or the description holds a CR or LF
+ * @internal
+ */
+func requireWritableHeader(id as string, description as string, what as string, format as string) {
+    def trimmed as string init strings.trim($id);
+    if (len($trimmed) == 0) {
+        raiseError("a " + $what + " has no id, so it cannot be written as " + $format);
+    }
+    if (regex.matches('\s', $trimmed)) {
+        raiseError("the " + $what + " id " + summarise($trimmed) + " holds whitespace," +
+            " which would split it into id and description on parsing");
+    }
+    if (regex.matches('[\r\n]', $description)) {
+        raiseError($what + " '" + $trimmed + "' has a line break in its description");
+    }
+    return $trimmed;
 }
 
 /**
@@ -272,16 +335,25 @@ export func wrap(s as string, width as int) {
     if ($width <= 0) {
         raiseError("wrap width must be positive, got " + convert.toString($width));
     }
-    def buf as bytes init convert.bytesFromString($s, "utf-8");
-    def n as int init len($buf);
-    def out as bytes;
-    for (def i as int init 0; $i < $n; $i = $i + 1) {
-        if ($i > 0 and $i % $width == 0) {
-            $out[] = 10;
-        }
-        $out[] = $buf[$i];
+    def n as int init len($s);
+    if ($n <= $width) {
+        return $s;
     }
-    return convert.stringFromBytes($out, "utf-8");
+    # One native slice per line. ASCII text (every real sequence) is cut on
+    # bytes; anything else on runes, so a multi-byte character is never split.
+    def lines as list of string;
+    def buf as bytes init convert.bytesFromString($s, "utf-8");
+    if (len($buf) == $n) {
+        for (def i as int init 0; $i < $n; $i = $i + $width) {
+            $lines[] = convert.stringFromBytes($buf[$i..math.min($i + $width, $n)], "utf-8");
+        }
+    } else {
+        def chars as list of string init strings.chars($s);
+        for (def i as int init 0; $i < $n; $i = $i + $width) {
+            $lines[] = strings.join($chars[$i..math.min($i + $width, $n)], "");
+        }
+    }
+    return strings.join($lines, "\n");
 }
 
 /**
@@ -298,12 +370,17 @@ export func wrap(s as string, width as int) {
  * @example bioseq.toPlain(">x\n1 atg acg\n") == "atgacg"
  */
 export func toPlain(text as string) {
-    def out as string init "";
+    def out as list of string;
     for (def line in splitLines($text)) {
         if (strings.startsWith(strings.trim($line), ">")) {
             continue;
         }
         if (strings.startsWith(strings.trim($line), ";")) {
+            continue;
+        }
+        # Most lines hold nothing to drop; keep those whole after one native test.
+        if (not regex.matches('[\x00- 0-9]', $line)) {
+            $out[] = $line;
             continue;
         }
         def buf as bytes init convert.bytesFromString($line, "utf-8");
@@ -319,9 +396,9 @@ export func toPlain(text as string) {
             }
             $kept[] = $code;
         }
-        $out = $out + convert.stringFromBytes($kept, "utf-8");
+        $out[] = convert.stringFromBytes($kept, "utf-8");
     }
-    return $out;
+    return strings.join($out, "");
 }
 
 # ------------------------------------------------------------------------ FASTQ
@@ -332,16 +409,30 @@ export func toPlain(text as string) {
  * Reads the four-line form and the wrapped form: sequence lines are gathered
  * until a `+` line, then quality lines until the quality is as long as the
  * sequence. Quality is read by length, not by looking for `@`, because `@` is a
- * valid Phred+33 character (Q31). At most `MAX_RECORDS` reads are built.
+ * valid Phred+33 character (Q31). Quality characters must be printable ASCII
+ * (`!` to `~`, bytes 33 to 126). At most `MAX_RECORDS` reads are built.
  *
  * @param text {string} the contents of a FASTQ file
  * @return {list of Read} the reads, in file order
  * @throws {Error} kind "bioinformatics" when there is no record, a record does not
- *         start with `@`, lacks its `+` separator, or has a quality string of the
- *         wrong length, or past `MAX_RECORDS`
+ *         start with `@`, lacks its `+` separator, has a quality string of the
+ *         wrong length or a quality byte outside 33..126, or past `MAX_RECORDS`
  * @example bioseq.parseFastq("@r1\nATGC\n+\nIIII\n")[0].quality == "IIII"
  */
 export func parseFastq(text as string) {
+    return parseFastqUpTo($text, MAX_RECORDS);
+}
+
+/**
+ * `parseFastq` with the record cap as a parameter, so a test can reach it.
+ *
+ * @param text {string} the contents of a FASTQ file
+ * @param limit {int} the most reads to build
+ * @return {list of Read} the reads, in file order
+ * @throws {Error} kind "bioinformatics" as for `parseFastq`, past `limit` reads
+ * @internal
+ */
+func parseFastqUpTo(text as string, limit as int) {
     def lines as list of string init splitLines($text);
     def n as int init len($lines);
     def out as list of Read;
@@ -359,26 +450,34 @@ export func parseFastq(text as string) {
         def parts as list of string init splitHeader($lines[$i][1..], "@");
         $i = $i + 1;
 
-        def sequence as string init "";
+        def seqPieces as list of string;
         while ($i < $n and not strings.startsWith($lines[$i], "+")) {
-            $sequence = $sequence + stripSpace($lines[$i]);
+            $seqPieces[] = stripSpace($lines[$i]);
             $i = $i + 1;
         }
+        def sequence as string init strings.join($seqPieces, "");
         if ($i >= $n) {
             raiseError("FASTQ record '" + $parts[0] + "' has no '+' separator line");
         }
         $i = $i + 1;
 
-        def quality as string init "";
-        while ($i < $n and len($quality) < len($sequence)) {
-            $quality = $quality + stripSpace($lines[$i]);
+        # Quality is ASCII once checked, so rune and byte lengths agree.
+        def want as int init len($sequence);
+        def got as int init 0;
+        def qualPieces as list of string;
+        while ($i < $n and $got < $want) {
+            def piece as string init stripSpace($lines[$i]);
+            requireQualityText($piece, $parts[0]);
+            $qualPieces[] = $piece;
+            $got = $got + len($piece);
             $i = $i + 1;
         }
+        def quality as string init strings.join($qualPieces, "");
         if (len($quality) != len($sequence)) {
             raiseError("FASTQ record '" + $parts[0] + "' has " + convert.toString(len($sequence)) +
                 " bases but " + convert.toString(len($quality)) + " quality characters");
         }
-        requireRoom(len($out) + 1, "FASTQ reads");
+        requireRoom(len($out) + 1, $limit, "FASTQ reads");
         $out[] = Read{
             id: $parts[0],
             description: $parts[1],
@@ -396,15 +495,41 @@ export func parseFastq(text as string) {
  * Stop a parse that has produced implausibly many records.
  *
  * @param count {int} how many there would be once the next one is added
+ * @param limit {int} the cap, `MAX_RECORDS` outside tests
  * @param what {string} what is being counted, for the message
- * @throws {Error} kind "bioinformatics" when the count exceeds `MAX_RECORDS`
+ * @throws {Error} kind "bioinformatics" when the count exceeds `limit`
  * @internal
  */
-func requireRoom(count as int, what as string) {
-    if ($count > MAX_RECORDS) {
-        raiseError("more than " + convert.toString(MAX_RECORDS) + " " + $what +
-            " in one parse - refusing to continue, since a file of bare" +
+func requireRoom(count as int, limit as int, what as string) {
+    if ($count > $limit) {
+        raiseError("more than " + convert.toString($limit) + " " + $what +
+            " in one parse (MAX_RECORDS) - refusing to continue, since a file of bare" +
             " header lines expands about a hundredfold in memory");
+    }
+}
+
+/**
+ * Reject quality text holding a byte outside printable ASCII.
+ *
+ * Phred+33 and Phred+64 both encode into `!` .. `~`. A byte outside that range
+ * is not a score, and a multi-byte character would make the quality's rune
+ * length disagree with the number of scores decoded from its bytes.
+ *
+ * @param quality {string} quality characters
+ * @param id {string} the read id, for the message
+ * @throws {Error} kind "bioinformatics" on a byte outside 33..126
+ * @internal
+ */
+func requireQualityText(quality as string, id as string) {
+    if (regex.matches('^[!-~]*$', $quality)) {
+        return;
+    }
+    def buf as bytes init convert.bytesFromString($quality, "utf-8");
+    for (def i as int init 0; $i < len($buf); $i = $i + 1) {
+        if ($buf[$i] < 33 or $buf[$i] > 126) {
+            raiseError("quality " + describeCode($buf[$i]) + " in read '" + $id +
+                "' is not a quality character (printable ASCII '!' to '~', bytes 33 to 126)");
+        }
     }
 }
 
@@ -426,33 +551,49 @@ func summarise(line as string) {
  * Render reads as four-line FASTQ text.
  *
  * The `+` separator is written bare rather than repeating the id, which is what
- * every current tool emits and what halves the size of a large file.
+ * every current tool emits and what halves the size of a large file. The id is
+ * written trimmed. Output parses back to the same reads, so a field that would
+ * break that raises: whitespace in the id, a CR or LF in the description,
+ * whitespace in the sequence or a leading `+` (read as the separator), a
+ * quality byte outside 33..126.
  *
  * @param reads {list of Read} the reads to write
  * @return {string} FASTQ text, ending in a newline
- * @throws {Error} kind "bioinformatics" when the list is empty, a read has no id, or a
- *         read's quality length disagrees with its sequence length
+ * @throws {Error} kind "bioinformatics" when the list is empty, a read has no id, a
+ *         read's quality length disagrees with its sequence length, or a field holds
+ *         a character listed above
  */
 export func writeFastq(reads as list of Read) {
     if (len($reads) == 0) {
         raiseError("no reads to write");
     }
-    def out as string init "";
+    # Pieces are collected and joined once; `+` onto the growing output
+    # recopied it per read (8000 reads took 28 seconds).
+    def out as list of string;
     for (def r in $reads) {
-        if (len(strings.trim($r.id)) == 0) {
-            raiseError("a read has no id, so it cannot be written as FASTQ");
+        def id as string init requireWritableHeader($r.id, $r.description, "read", "FASTQ");
+        if (regex.matches('\s', $r.sequence) or strings.startsWith($r.sequence, "+")) {
+            raiseError("read '" + $id + "' has whitespace or a leading '+' in its sequence," +
+                " which would not parse back as the same read");
         }
+        requireQualityText($r.quality, $id);
         if (len($r.sequence) != len($r.quality)) {
-            raiseError("read '" + $r.id + "' has " + convert.toString(len($r.sequence)) +
+            raiseError("read '" + $id + "' has " + convert.toString(len($r.sequence)) +
                 " bases but " + convert.toString(len($r.quality)) + " quality characters");
         }
-        $out = $out + "@" + $r.id;
+        $out[] = "@";
+        $out[] = $id;
         if (len($r.description) > 0) {
-            $out = $out + " " + $r.description;
+            $out[] = " ";
+            $out[] = $r.description;
         }
-        $out = $out + "\n" + $r.sequence + "\n+\n" + $r.quality + "\n";
+        $out[] = "\n";
+        $out[] = $r.sequence;
+        $out[] = "\n+\n";
+        $out[] = $r.quality;
+        $out[] = "\n";
     }
-    return $out;
+    return strings.join($out, "");
 }
 
 /**
@@ -477,7 +618,7 @@ export func fastqToFasta(reads as list of Read) {
  * @param r {Read} the read
  * @return {list of int} one score per base
  * @throws {Error} kind "bioinformatics" when the quality and sequence lengths differ,
- *         or a score decodes negative
+ *         a quality byte is outside 33..126, or a score decodes negative
  * @example bioseq.qualityScores($r)[0] == 40   # 'I' under Phred+33
  */
 export func qualityScores(r as Read) {
@@ -495,7 +636,8 @@ export func qualityScores(r as Read) {
  * @param offset {int} `PHRED33` or `PHRED64`
  * @return {list of int} one score per base
  * @throws {Error} kind "bioinformatics" when the quality and sequence lengths differ,
- *         or a quality character decodes to a negative score (wrong offset)
+ *         a quality byte is outside 33..126, or a quality character decodes to a
+ *         negative score (wrong offset)
  */
 export func qualityScoresWith(r as Read, offset as int) {
     # A `Read` can arrive from somewhere other than `parseFastq` - built by
@@ -503,6 +645,7 @@ export func qualityScoresWith(r as Read, offset as int) {
     # that the quality is as long as the sequence. Both the parser and the
     # writer enforce it; without this the quality verbs would quietly report a
     # mean over whichever bases happened to have a score.
+    requireQualityText($r.quality, $r.id);
     if (len($r.sequence) != len($r.quality)) {
         raiseError("read '" + $r.id + "' has " + convert.toString(len($r.sequence)) +
             " bases but " + convert.toString(len($r.quality)) + " quality characters");
@@ -533,7 +676,8 @@ export func qualityScoresWith(r as Read, offset as int) {
  * @param r {Read} the read
  * @return {float} the mean score
  * @throws {Error} kind "bioinformatics" when the read has no bases, its quality and
- *         sequence lengths differ, or a score decodes negative
+ *         sequence lengths differ, a quality byte is outside 33..126, or a score
+ *         decodes negative
  */
 export func meanQuality(r as Read) {
     return meanQualityWith($r, PHRED33);
@@ -546,7 +690,8 @@ export func meanQuality(r as Read) {
  * @param offset {int} `PHRED33` or `PHRED64`
  * @return {float} the mean score
  * @throws {Error} kind "bioinformatics" when the read has no bases, its quality and
- *         sequence lengths differ, or a score decodes negative
+ *         sequence lengths differ, a quality byte is outside 33..126, or a score
+ *         decodes negative
  */
 export func meanQualityWith(r as Read, offset as int) {
     def scores as list of int init qualityScoresWith($r, $offset);

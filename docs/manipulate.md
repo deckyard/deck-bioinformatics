@@ -33,9 +33,12 @@ bioseq.randomDnaWith(40, {"A": 1.0, "G": 1.0});   # purines only
 
 Weights are relative and normalised: `{"A": 3.0, "T": 1.0}` and
 `{"A": 75.0, "T": 25.0}` are the same distribution. A residue left out (or
-weighted 0) never appears. A key outside the generator's alphabet, a negative
-weight, or all-zero weights raise. `randomRnaWith` and `randomProteinWith` work
-the same way.
+weighted 0) never appears. A key that is not a single residue of the
+generator's alphabet, a negative weight, or all-zero weights raise. Weights of
+any finite magnitude work (they are scaled by the largest before summing). The
+draw walks the alphabet in its own order (`ACGT`, `ACGU`, `STANDARD_RESIDUES`),
+so a seed gives the same sequence for the same weights however the map was
+built. `randomRnaWith` and `randomProteinWith` work the same way.
 
 Real proteins are far from uniform. For a realistic null model, take the
 composition of a real one:

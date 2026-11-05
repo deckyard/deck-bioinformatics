@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - white-box tests for the manipulate topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -417,4 +417,40 @@ func testShuffleDestroysMotifsButNotComposition() {
     # a six-base site survives shuffling only by chance, so across thirty
     # shuffles of a 124-base sequence it should be rare
     testing.assertTrue($kept < 10);
+}
+
+# ------------------------------------------------------ after the seq review
+
+func testWeightKeysAreSingleResidues() {
+    # "AC" passed strings.contains("ACGT", ...) and drew only its first byte;
+    # "" passed too and failed at runtime
+    testing.assertThrows("weightTwoLetterKey", "bioinformatics");
+    testing.assertThrows("weightEmptyKey", "bioinformatics");
+}
+
+func weightTwoLetterKey() {
+    randomDnaWith(10, {"AC": 1.0});
+}
+
+func weightEmptyKey() {
+    randomDnaWith(10, {"": 1.0});
+}
+
+func testHugeWeightsDoNotOverflow() {
+    # 1e308 + 1e308 overflowed the total; equal weights still mean A and C only
+    math.randSeed(5);
+    def s as string init randomDnaWith(400, {"A": 1e308, "C": 1e308});
+    testing.assertEqual(len($s), 400);
+    def counts as map of string to int init baseCount($s);
+    testing.assertEqual(len($counts), 2);
+    testing.assertEqual($counts["A"] + $counts["C"], 400);
+}
+
+func testWeightedDrawIgnoresMapOrder() {
+    # same seed, same weights, maps built in different orders
+    math.randSeed(42);
+    def a as string init randomDnaWith(60, {"T": 1.0, "A": 2.0, "G": 3.0, "C": 4.0});
+    math.randSeed(42);
+    def b as string init randomDnaWith(60, {"A": 2.0, "C": 4.0, "G": 3.0, "T": 1.0});
+    testing.assertEqual($a, $b);
 }

@@ -26,9 +26,12 @@ $records[0].sequence;      # wrapped lines joined
 ```
 
 - Wrapped sequence lines, blank lines, CRLF endings and descriptions are
-  accepted. Spaces and tabs inside sequence lines are dropped.
-- The id is the first whitespace-delimited token after `>`, so pipes and colons
-  stay in the id; the trimmed rest of the line is the description.
+  accepted. Spaces and tabs inside sequence lines are dropped. Lines starting
+  with `;` (after leading whitespace) are comments and skipped, anywhere in the
+  file.
+- The id is everything after `>` up to the first space or tab, so pipes,
+  colons and non-ASCII characters stay in the id; the trimmed rest of the line
+  is the description.
 - Only structure is checked: data before the first `>` and a header with no id
   raise, as does text with no record. Residues are not validated against any
   alphabet.
@@ -56,8 +59,19 @@ bioseq.wrap($sequence, 60);                   # no trailing newline
 ```
 
 Output ends in a newline. A record with an empty sequence is written as its
-header alone. Parsing the output returns the same records at any width. An
-empty list, a record with no id, or a width below 1 raises.
+header alone. The id is written trimmed. `wrap` counts characters, not bytes.
+
+Parsing the output returns the same records at any width, so a field that would
+break that raises instead of being written:
+
+| field | rejected |
+| - | - |
+| `id` | empty, or any whitespace inside it (it would split into id and description) |
+| `description` | CR or LF |
+| `sequence` | whitespace, `>` or `;` (a wrapped line starting with either reads back as a header or comment) |
+
+An empty list or a width below 1 raises too. Output is collected in pieces and
+joined once, so writing is linear in the output size.
 
 ### Pasted text
 
@@ -80,11 +94,16 @@ $reads[0].quality;   # exactly as long as the sequence
 Both the four-line form and the wrapped form are read. Sequence lines run to the
 `+` line; quality lines are then read until the quality is as long as the
 sequence. Quality is not delimited by `@` because `@` is a valid Phred+33
-character (Q31). A length mismatch, a missing `+` line or a record not starting
-with `@` raises, as does exceeding `MAX_RECORDS`.
+character (Q31). Quality characters must be printable ASCII, `!` to `~`
+(bytes 33 to 126); anything else raises, so the quality's length is its number
+of scores. A length mismatch, a missing `+` line or a record not starting with
+`@` raises, as does exceeding `MAX_RECORDS`.
 
-`writeFastq` writes the four-line form with a bare `+` line. `fastqToFasta`
-drops the qualities.
+`writeFastq` writes the four-line form with a bare `+` line and the trimmed id.
+As for FASTA, fields that would not parse back raise: an empty id or whitespace
+in it, CR or LF in the description, whitespace or a leading `+` in the sequence
+(a line starting with `+` is the separator), a quality byte outside 33..126, or
+quality and sequence of different lengths. `fastqToFasta` drops the qualities.
 
 ### Quality scores
 
@@ -100,8 +119,8 @@ bioseq.errorProbability(30);                          # 0.001
 
 The offset is never guessed. Reading Phred+33 data as Phred+64 shifts every
 score by 31; the resulting negative scores raise. A `Read` built by hand is
-checked too: quality and sequence lengths must match, as the parser and writer
-require.
+checked too: quality bytes must be in 33..126 and quality and sequence lengths
+must match, as the parser and writer require.
 
 `meanQuality` is the arithmetic mean of the scores, the figure quality plots
 show. Phred is logarithmic, so it understates the worst bases; use

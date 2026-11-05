@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - white-box tests for the formats topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -467,4 +467,184 @@ func testRecordCapIsCheckedBeforeAllocating() {
     # existed than the limit allowed; the guard now runs first
     testing.assertEqual(len(parseFasta(FASTA_TWO)), 2);
     testing.assertEqual(len(parseFastq(FASTQ_TWO)), 2);
+}
+
+# ------------------------------------------------- record cap, reached for real
+
+func testRecordCapRaisesPastTheLimit() {
+    # MAX_RECORDS itself is too large to reach in a test, so the parsers take
+    # the cap as a parameter and these run them against a cap of two.
+    testing.assertEqual(len(parseFastaUpTo(">a\n>b\n", 2)), 2);
+    testing.assertEqual(len(parseFastqUpTo("@a\nA\n+\nI\n@b\nC\n+\nI\n", 2)), 2);
+    testing.assertThrows("fastaPastCap", "bioinformatics");
+    testing.assertThrows("fastqPastCap", "bioinformatics");
+    testing.assertThrows("roomPastMaxRecords", "bioinformatics");
+    requireRoom(MAX_RECORDS, MAX_RECORDS, "records");
+}
+
+func fastaPastCap() {
+    parseFastaUpTo(">a\n>b\n>c\n", 2);
+}
+
+func fastqPastCap() {
+    parseFastqUpTo("@a\nA\n+\nI\n@b\nC\n+\nI\n@c\nG\n+\nI\n", 2);
+}
+
+func roomPastMaxRecords() {
+    requireRoom(MAX_RECORDS + 1, MAX_RECORDS, "records");
+}
+
+# ------------------------------------------------------ after the seq review
+
+func testHeaderSplitCountsRunes() {
+    # The cut was found as a byte offset and applied as a rune index, so a
+    # non-ASCII id kept part of the separator ("séq1 ").
+    def r as Record init parseFasta(">séq1 desc here\nACGT\n")[0];
+    testing.assertEqual($r.id, "séq1");
+    testing.assertEqual($r.description, "desc here");
+    def q as Read init parseFastq("@réad1 x\nA\n+\nI\n")[0];
+    testing.assertEqual($q.id, "réad1");
+    testing.assertEqual($q.description, "x");
+    def t as Record init parseFasta(">äb\tc d\nA\n")[0];
+    testing.assertEqual($t.id, "äb");
+    testing.assertEqual($t.description, "c d");
+}
+
+func testQualityRejectsNonPrintableBytes() {
+    # "é" is one rune but two bytes: its length matched one base while it
+    # decoded to two scores (162, 136).
+    testing.assertThrows("parseNonAsciiQuality", "bioinformatics");
+    testing.assertThrows("scoreNonAsciiQuality", "bioinformatics");
+    testing.assertThrows("scoreDelQuality", "bioinformatics");
+    testing.assertThrows("writeNonAsciiQuality", "bioinformatics");
+    # both ends of the range still decode: '!' = 33 - 33 = 0, '~' = 126 - 33 = 93
+    def r as Read init Read{id: "r", description: "", sequence: "AC", quality: "!~"};
+    testing.assertEqual(qualityScores($r), [0, 93]);
+}
+
+func parseNonAsciiQuality() {
+    parseFastq("@r\nA\n+\né\n");
+}
+
+func scoreNonAsciiQuality() {
+    qualityScores(Read{id: "r", description: "", sequence: "A", quality: "é"});
+}
+
+func scoreDelQuality() {
+    qualityScores(Read{id: "r", description: "", sequence: "A", quality: "\u007f"});
+}
+
+func writeNonAsciiQuality() {
+    writeFastq([Read{id: "r", description: "", sequence: "A", quality: "é"}]);
+}
+
+func testWritersRejectFieldsThatDoNotRoundTrip() {
+    # Each of these was written and parsed back as something else: an id with
+    # a space split into id + description, a newline injected a second record.
+    testing.assertThrows("fastaIdWithSpace", "bioinformatics");
+    testing.assertThrows("fastaIdWithTab", "bioinformatics");
+    testing.assertThrows("fastaDescriptionWithNewline", "bioinformatics");
+    testing.assertThrows("fastaSequenceWithNewline", "bioinformatics");
+    testing.assertThrows("fastaSequenceWithHeaderAtWrap", "bioinformatics");
+    testing.assertThrows("fastaSequenceWithSemicolon", "bioinformatics");
+    testing.assertThrows("fastqIdWithSpace", "bioinformatics");
+    testing.assertThrows("fastqDescriptionWithReturn", "bioinformatics");
+    testing.assertThrows("fastqSequenceWithNewline", "bioinformatics");
+    testing.assertThrows("fastqSequenceLeadingPlus", "bioinformatics");
+    testing.assertThrows("fastqQualityWithNewline", "bioinformatics");
+}
+
+func fastaIdWithSpace() {
+    writeFasta([Record{id: "a b", description: "", sequence: "ACGT"}]);
+}
+
+func fastaIdWithTab() {
+    writeFasta([Record{id: "a\tb", description: "", sequence: "ACGT"}]);
+}
+
+func fastaDescriptionWithNewline() {
+    writeFasta([Record{id: "a", description: "d\n>evil", sequence: "ACGT"}]);
+}
+
+func fastaSequenceWithNewline() {
+    writeFasta([Record{id: "x", description: "d", sequence: "AC\n>evil\nGG"}]);
+}
+
+func fastaSequenceWithHeaderAtWrap() {
+    # no newline in the field, but the wrap puts '>' at the start of line two
+    writeFastaWrapped([Record{id: "x", description: "", sequence: "ACGT>evil"}], 4);
+}
+
+func fastaSequenceWithSemicolon() {
+    writeFastaWrapped([Record{id: "x", description: "", sequence: "ACGT;note"}], 4);
+}
+
+func fastqIdWithSpace() {
+    writeFastq([Read{id: "a b", description: "", sequence: "A", quality: "I"}]);
+}
+
+func fastqDescriptionWithReturn() {
+    writeFastq([Read{id: "a", description: "d\r", sequence: "A", quality: "I"}]);
+}
+
+func fastqSequenceWithNewline() {
+    writeFastq([Read{id: "a", description: "", sequence: "A\nC", quality: "III"}]);
+}
+
+func fastqSequenceLeadingPlus() {
+    writeFastq([Read{id: "a", description: "", sequence: "+A", quality: "II"}]);
+}
+
+func fastqQualityWithNewline() {
+    writeFastq([Read{id: "a", description: "", sequence: "AAA", quality: "I\nI"}]);
+}
+
+func testWritersEmitTheTrimmedId() {
+    # the trimmed id is the one checked, so it is the one written
+    testing.assertEqual(
+        writeFasta([Record{id: "  s1 ", description: "", sequence: "AC"}]),
+        ">s1\nAC\n");
+    testing.assertEqual(
+        writeFastq([Read{id: " r1", description: "", sequence: "A", quality: "I"}]),
+        "@r1\nA\n+\nI\n");
+}
+
+func testParseFastaSkipsCommentLines() {
+    # ';' lines were folded into the sequence (";commentACGT"); toPlain already
+    # dropped them
+    def r as Record init parseFasta(";file comment\n>x\n;comment\nACGT\n  ;indented\nGG\n")[0];
+    testing.assertEqual($r.sequence, "ACGTGG");
+}
+
+func testWrapCutsOnCharacters() {
+    # the byte loop put the newline inside "é" and failed decoding the result
+    testing.assertEqual(wrap("éaébcd", 4), "éaéb\ncd");
+    testing.assertEqual(wrap("ACGTACGTA", 4), "ACGT\nACGT\nA");
+    testing.assertEqual(wrap("ACGT", 4), "ACGT");
+}
+
+func testLargeRecordsRoundTrip() {
+    # the joined-pieces paths, over enough lines and records to exercise them:
+    # 250 lines of 60 plus one of 7 is 15 007 bases
+    def body as string init strings.repeat("ACGTAC", 2501) + "A";
+    def recs as list of Record init parseFasta(writeFasta([
+        Record{id: "big", description: "", sequence: $body}
+    ]));
+    testing.assertEqual($recs[0].sequence, $body);
+    def reads as list of Read;
+    for (def i as int init 0; $i < 300; $i = $i + 1) {
+        $reads[] = Read{
+            id: "r" + convert.toString($i),
+            description: "",
+            sequence: "ACGT",
+            quality: "II#I"
+        };
+    }
+    def back as list of Read init parseFastq(writeFastq($reads));
+    testing.assertEqual(len($back), 300);
+    testing.assertEqual($back[299].id, "r299");
+    testing.assertEqual($back[299].quality, "II#I");
+    testing.assertEqual(
+        toPlain(writeFasta([Record{id: "big", description: "", sequence: $body}])),
+        $body);
 }

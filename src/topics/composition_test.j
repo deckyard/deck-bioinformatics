@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - white-box tests for the composition topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -480,4 +480,91 @@ func testCodonUsageRejectsShortSequence() {
 
 func usageTooShort() {
     codonUsage("AT");
+}
+
+# ------------------------------------------------------ after the seq review
+
+func testGcWindowsAgreesWithARecount() {
+    # brute force: each window recounted from its own slice
+    math.randSeed(11);
+    def s as string init randomDna(997);
+    for (def shape in [[50, 1], [100, 37], [997, 5], [7, 7]]) {
+        def size as int init $shape[0];
+        def step as int init $shape[1];
+        def got as list of float init gcWindows($s, $size, $step);
+        def k as int init 0;
+        for (def start as int init 0; $start + $size <= len($s); $start = $start + $step) {
+            def hits as int init gcRecount($s[$start..$start + $size]);
+            testing.assertEqual($got[$k], 100.0 * $hits / $size);
+            $k = $k + 1;
+        }
+        testing.assertEqual(len($got), $k);
+    }
+}
+
+func gcRecount(window as string) {
+    def hits as int init 0;
+    for (def c in strings.chars($window)) {
+        if ($c == "G" or $c == "C") {
+            $hits = $hits + 1;
+        }
+    }
+    return $hits;
+}
+
+func testNetChargeAtExtremePh() {
+    # pow(10, pH - pKa) overflowed. Far above every pKa only the acids carry
+    # charge: D, E and the C-terminus give -3. Far below, only the bases: K and
+    # the N-terminus give +2.
+    testing.assertTrue(close(netCharge("KDE", 400.0), -3.0, 1e-12));
+    testing.assertTrue(close(netCharge("KDE", -400.0), 2.0, 1e-12));
+}
+
+func testNetChargeFormUnchangedInRange() {
+    # the rearranged fraction equals the textbook 1 / (1 + 10^x) at pH 7
+    def ph as float init 7.0;
+    def want as float init 1.0 /
+        (1.0 + math.pow(10.0, $ph - PKA_N_TERMINUS)) -
+        1.0 / (1.0 + math.pow(10.0, PKA_C_TERMINUS - $ph)) +
+        1.0 /
+        (1.0 + math.pow(10.0, $ph - aminoAcid("K").pKa)) -
+        1.0 /
+        (1.0 + math.pow(10.0, aminoAcid("D").pKa - $ph)) -
+        1.0 / (1.0 + math.pow(10.0, aminoAcid("E").pKa - $ph));
+    testing.assertTrue(close(netCharge("KDE", $ph), $want, 1e-12));
+}
+
+func testMeltingTempNnRejectsNonPhysicalConditions() {
+    # 1e-320 nM is 1e-329 M, which underflows to 0 and made ln() fail at
+    # runtime. 1e300 nM: R ln(2.5e290) = 1.987 * 668.7 = +1329 cal/K/mol, far
+    # above the strand's summed entropy (about -500), so the denominator turns
+    # positive and Tm came out at -422 C - below absolute zero.
+    testing.assertThrows("tmUnderflowingPrimer", "bioinformatics");
+    testing.assertThrows("tmHugePrimer", "bioinformatics");
+}
+
+func tmUnderflowingPrimer() {
+    meltingTempNnWith("ATGCATGCATGCATGCAA", 1e-320, 50.0);
+}
+
+func tmHugePrimer() {
+    meltingTempNnWith("ATGCATGCATGCATGCAA", 1e300, 50.0);
+}
+
+func testAmbiguityOffsetIsInTheInputAsGiven() {
+    # "AC GN": the N is byte 4 of the input; the cleaned "ACGN" put it at 3
+    def caught as string init "";
+    try {
+        meltingTemp("AC GN");
+    } catch (e) {
+        $caught = $e.message;
+    }
+    testing.assertTrue(strings.contains($caught, "position 4"));
+    $caught = "";
+    try {
+        meltingTempNn("12 acgr");
+    } catch (e) {
+        $caught = $e.message;
+    }
+    testing.assertTrue(strings.contains($caught, "'R' at position 6"));
 }

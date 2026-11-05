@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - transforms: turning one sequence into another.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -214,10 +214,12 @@ export func translate(nt as string) {
  * @param nt {string} a DNA or RNA sequence
  * @param table {map of string to string} a genetic code, e.g. `bioseq.BACTERIAL`
  * @return {string} the protein, stops as `*`
- * @throws {Error} kind "bioinformatics" when the sequence is empty or not a nucleic acid
+ * @throws {Error} kind "bioinformatics" when the sequence is empty or not a nucleic
+ *         acid, or a table value is not a single ASCII character
  * @example bioseq.translateWith($mito, bioseq.VERTEBRATE_MITOCHONDRIAL)
  */
 export func translateWith(nt as string, table as map of string to string) {
+    requireCodonTable($table);
     def clean as string init requireNucleotide($nt);
     return translateClean($clean, $table);
 }
@@ -247,13 +249,15 @@ export func translateFrame(nt as string, frame as int) {
  * @param frame {int} one of 1, 2, 3, -1, -2, -3
  * @param table {map of string to string} a genetic code
  * @return {string} the protein for that frame
- * @throws {Error} kind "bioinformatics" when the frame is not one of the six, or the
- *         sequence is empty or not a nucleic acid
+ * @throws {Error} kind "bioinformatics" when the frame is not one of the six, the
+ *         sequence is empty or not a nucleic acid, or a table value is not a single
+ *         ASCII character
  */
 export func translateFrameWith(nt as string, frame as int, table as map of string to string) {
     if ($frame == 0 or $frame < -3 or $frame > 3) {
         raiseError("frame must be one of 1, 2, 3, -1, -2, -3, got " + convert.toString($frame));
     }
+    requireCodonTable($table);
     def clean as string init requireNucleotide($nt);
     def strand as string init $clean;
     def offset as int init $frame - 1;
@@ -286,9 +290,11 @@ export func sixFrame(nt as string) {
  * @param nt {string} a DNA or RNA sequence
  * @param table {map of string to string} a genetic code
  * @return {list of Frame} one record per frame
- * @throws {Error} kind "bioinformatics" when the sequence is empty or not a nucleic acid
+ * @throws {Error} kind "bioinformatics" when the sequence is empty or not a nucleic
+ *         acid, or a table value is not a single ASCII character
  */
 export func sixFrameWith(nt as string, table as map of string to string) {
+    requireCodonTable($table);
     def clean as string init requireNucleotide($nt);
     def rna as bool init isRnaSpelling($clean);
     def rc as string init complementBytes($clean, $rna, true);
@@ -300,6 +306,27 @@ export func sixFrameWith(nt as string, table as map of string to string) {
         $out[] = frameRecord(-$f, $rc, $f - 1, $table);
     }
     return $out;
+}
+
+/**
+ * Reject a codon table whose values are not single residues.
+ *
+ * `translateClean` writes the first byte of each looked-up value, so an empty
+ * value would fail inside the loop and a longer one would be silently cut. The
+ * table is checked once per call, before any codon is read.
+ *
+ * @param table {map of string to string} a genetic code
+ * @throws {Error} kind "bioinformatics" when a value is not one ASCII character
+ * @internal
+ */
+func requireCodonTable(table as map of string to string) {
+    for (def codon in $table) {
+        def value as bytes init convert.bytesFromString($table[$codon], "utf-8");
+        if (len($value) != 1 or $value[0] >= 128) {
+            raiseError("codon table maps '" + $codon + "' to " + summarise($table[$codon]) +
+                ", not a single one-letter residue");
+        }
+    }
 }
 
 /**
@@ -487,8 +514,9 @@ export func oneToThree(protein as string) {
  *
  * @param protein {string} a protein sequence in three-letter codes
  * @return {string} the one-letter spelling
- * @throws {Error} kind "bioinformatics" when the length is not a multiple of three or a
- *         group is not a residue code
+ * @throws {Error} kind "bioinformatics" when the length is not a multiple of three, a
+ *         group is not a residue code, or the input holds a non-ASCII byte; positions
+ *         are byte offsets into the input as given
  * @example bioseq.threeToOne("Met-Lys-Val") == "MKV"
  */
 export func threeToOne(protein as string) {
@@ -497,23 +525,30 @@ export func threeToOne(protein as string) {
     # whole loop goes quadratic. Separators are dropped in the same pass.
     def buf as bytes init convert.bytesFromString($protein, "utf-8");
     def n as int init len($buf);
+    # `at` holds each kept byte's offset in the input, for the error message.
     def kept as bytes;
+    def at as list of int;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
         def code as int init $buf[$i];
         if ($code == 45 or $code == 32 or $code == 9 or $code == 10 or $code == 13) {
             continue;
         }
+        if ($code >= 128) {
+            raiseError("not a three-letter residue code: " + describeCode($code) + " at position " +
+                convert.toString($i));
+        }
         if ($code >= 97 and $code <= 122) {
             $code = $code - 32;
         }
         $kept[] = $code;
+        $at[] = $i;
     }
     def total as int init len($kept);
     if ($total == 0) {
         raiseError("empty protein sequence");
     }
     if ($total % 3 != 0) {
-        raiseError("a three-letter protein has a length divisible by three, got " +
+        raiseError("a three-letter protein needs a length divisible by three, got " +
             convert.toString($total));
     }
     def out as bytes;
@@ -525,7 +560,7 @@ export func threeToOne(protein as string) {
         def code as string init convert.stringFromBytes($group, "utf-8");
         if (not maps.has(ONE_LETTER, $code)) {
             raiseError("not a three-letter residue code: '" + $code + "' at position " +
-                convert.toString($i));
+                convert.toString($at[$i]));
         }
         def one as bytes init convert.bytesFromString(ONE_LETTER[$code], "utf-8");
         $out[] = $one[0];

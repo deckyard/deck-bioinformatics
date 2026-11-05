@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - white-box tests for the core topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -249,4 +249,26 @@ func kindNameOnZero() {
 
 func kindNameOnHigh() {
     kindName(99);
+}
+
+# ------------------------------------------------------ after the seq review
+
+func testAdmitsPatternsAgreeWithAdmits() {
+    # the fast path in normalizeBy reads the generated patterns; a residue the
+    # pattern admits but the list does not would skip validation
+    testing.assertTrue(patternAgrees(DNA_ADMITS_PATTERN, DNA_ADMITS));
+    testing.assertTrue(patternAgrees(RNA_ADMITS_PATTERN, RNA_ADMITS));
+    testing.assertTrue(patternAgrees(PROTEIN_ADMITS_PATTERN, PROTEIN_ADMITS));
+    testing.assertTrue(patternAgrees(NUCLEOTIDE_ADMITS_PATTERN, NUCLEOTIDE_ADMITS));
+}
+
+func patternAgrees(pattern as string, admits as list of bool) {
+    for (def code as int init 1; $code < 128; $code = $code + 1) {
+        def one as bytes;
+        $one[] = $code;
+        if (regex.matches($pattern, convert.stringFromBytes($one, "utf-8")) != $admits[$code]) {
+            return false;
+        }
+    }
+    return true;
 }

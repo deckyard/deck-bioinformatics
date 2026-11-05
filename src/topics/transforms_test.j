@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - white-box tests for the transforms topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -344,4 +344,55 @@ func threeToOneEmpty() {
 func testTranslateThenSpellIsChainable() {
     # the composition a user actually writes
     testing.assertEqual(oneToThree(translate("ATGACGTTACATGGATAA")), "MetThrLeuHisGlyTer");
+}
+
+# ------------------------------------------------------ after the seq review
+
+func testThreeToOneRejectsNonAsciiAtItsOffset() {
+    # "é" was kept as two bytes and the group decode failed with a runtime
+    # UTF-8 error; it is byte 2 of "MXéAB"
+    def caught as string init "";
+    try {
+        threeToOne("MXéAB");
+    } catch (e) {
+        testing.assertEqual($e.kind, "bioinformatics");
+        $caught = $e.message;
+    }
+    testing.assertTrue(strings.contains($caught, "byte 195 at position 2"));
+}
+
+func testThreeToOneReportsTheRawOffset() {
+    # "Met-Xyz": the bad group starts at byte 4 of the input, 3 of the kept text
+    def caught as string init "";
+    try {
+        threeToOne("Met-Xyz");
+    } catch (e) {
+        $caught = $e.message;
+    }
+    testing.assertTrue(strings.contains($caught, "'XYZ' at position 4"));
+}
+
+func testTranslateRejectsAMalformedTable() {
+    # an empty value failed inside the codon loop with a runtime bytes error;
+    # a two-letter one was silently cut to its first letter
+    testing.assertThrows("translateEmptyValue", "bioinformatics");
+    testing.assertThrows("translateLongValue", "bioinformatics");
+    testing.assertThrows("frameEmptyValue", "bioinformatics");
+    testing.assertThrows("sixFrameEmptyValue", "bioinformatics");
+}
+
+func translateEmptyValue() {
+    translateWith("ATG", {"ATG": ""});
+}
+
+func translateLongValue() {
+    translateWith("ATG", {"ATG": "MM"});
+}
+
+func frameEmptyValue() {
+    translateFrameWith("ATG", 1, {"ATG": ""});
+}
+
+func sixFrameEmptyValue() {
+    sixFrameWith("ATG", {"ATG": ""});
 }

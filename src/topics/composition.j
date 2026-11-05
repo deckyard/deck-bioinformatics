@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - composition: what a sequence is made of, and what that implies.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -188,18 +188,23 @@ export func gcWindows(s as string, size as int, step as int) {
         raiseError("sequence is " + convert.toString(len($clean)) + " bases, shorter than the " +
             convert.toString($size) + "-base window");
     }
+    # Prefix sums: before[i] is the G/C count of the first i bases, so each
+    # window costs one subtraction instead of a recount of `size` bases.
     def buf as bytes init convert.bytesFromString($clean, "utf-8");
     def n as int init len($buf);
+    def before as list of int;
+    $before[] = 0;
+    def running as int init 0;
+    for (def i as int init 0; $i < $n; $i = $i + 1) {
+        if ($buf[$i] == 71 or $buf[$i] == 67) {
+            $running = $running + 1;
+        }
+        $before[] = $running;
+    }
     def out as list of float;
     def start as int init 0;
     while ($start + $size <= $n) {
-        def hits as int init 0;
-        for (def i as int init $start; $i < $start + $size; $i = $i + 1) {
-            if ($buf[$i] == 71 or $buf[$i] == 67) {
-                $hits = $hits + 1;
-            }
-        }
-        $out[] = 100.0 * $hits / $size;
+        $out[] = 100.0 * ($before[$start + $size] -$before[$start]) / $size;
         $start = $start + $step;
     }
     return $out;
@@ -223,7 +228,7 @@ export func gcWindows(s as string, size as int, step as int) {
  * @return {float} the mass in daltons
  * @throws {Error} kind "bioinformatics" when the kind is unknown, the sequence is empty
  *         or of the wrong alphabet, or it carries an ambiguity code
- * @example bioseq.molecularWeight("ATGC", bioseq.DNA) == 1173.83
+ * @example bioseq.molecularWeight("ATGC", bioseq.DNA)   # 1173.82528
  */
 export func molecularWeight(s as string, kind as int) {
     requireKind($kind);
@@ -323,12 +328,17 @@ export func meltingTempNn(s as string) {
  * Parameters: SantaLucia (1998) unified set, exported as `NN_ENTHALPY`,
  * `NN_ENTROPY` and `GAS_CONSTANT`. Other sets differ by a degree or two.
  *
+ * Conditions that put Tm at or below 0 K (an `R ln(Ct/4)` or salt term large
+ * enough to flip the denominator's sign), or a concentration that underflows to
+ * 0 once converted to molar, raise instead of returning a meaningless number.
+ *
  * @param s {string} a DNA sequence of at least two bases
  * @param primerNm {float} total strand concentration in nanomolar
  * @param saltMm {float} monovalent cation concentration in millimolar
- * @return {float} the melting temperature in Celsius
+ * @return {float} the melting temperature in Celsius, above -273.15
  * @throws {Error} kind "bioinformatics" when the sequence is too short, not DNA,
- *         carries an ambiguity code, or a concentration is not positive
+ *         carries an ambiguity code, a concentration is not positive or underflows
+ *         once scaled to molar, or the conditions give no positive Tm in kelvin
  * @see SantaLucia J (1998) PNAS 95:1460-1465
  */
 export func meltingTempNnWith(s as string, primerNm as float, saltMm as float) {
@@ -376,10 +386,21 @@ export func meltingTempNnWith(s as string, primerNm as float, saltMm as float) {
 
     # salt correction, applied per phosphate
     def sodium as float init $saltMm / 1000.0;
+    def strands as float init $primerNm / 1000000000.0 / $divisor;
+    if ($sodium <= 0.0 or $strands <= 0.0) {
+        raiseError("a concentration is too small to take its logarithm once converted" +
+            " to molar (primer " + convert.toString($primerNm) + " nM, salt " +
+            convert.toString($saltMm) + " mM)");
+    }
     $entropy = $entropy + 0.368 * (len($clean) - 1) * math.ln($sodium);
-
-    def strands as float init $primerNm / 1000000000.0;
-    def denominator as float init $entropy + GAS_CONSTANT * math.ln($strands / $divisor);
+    def denominator as float init $entropy + GAS_CONSTANT * math.ln($strands);
+    # dH is negative for every sequence of two or more bases (the weakest stack,
+    # -7.2, outweighs both AT initiations, +4.6), so Tm in kelvin is positive
+    # exactly when the denominator is negative.
+    if ($denominator >= 0.0) {
+        raiseError("no physical melting temperature at primer " + convert.toString($primerNm) +
+            " nM and salt " + convert.toString($saltMm) + " mM: Tm would not be above 0 K");
+    }
     return $enthalpy * 1000.0 / $denominator - 273.15;
 }
 
@@ -396,9 +417,18 @@ export func meltingTempNnWith(s as string, primerNm as float, saltMm as float) {
  */
 func requireUnambiguousDna(s as string) {
     def clean as string init requireDna($s);
-    def buf as bytes init convert.bytesFromString($clean, "utf-8");
+    # Walk the input as given, not the cleaned copy, so the position is the byte
+    # offset the caller sees (as `normalizeBy` reports). `requireDna` has
+    # already rejected every foreign byte, so only skipping and case remain.
+    def buf as bytes init convert.bytesFromString($s, "utf-8");
     for (def i as int init 0; $i < len($buf); $i = $i + 1) {
         def code as int init $buf[$i];
+        if ($code == 32 or $code == 9 or $code == 10 or $code == 13 or ($code >= 48 and $code <= 57)) {
+            continue;
+        }
+        if ($code >= 97 and $code <= 122) {
+            $code = $code - 32;
+        }
         if ($code != 65 and $code != 67 and $code != 71 and $code != 84) {
             raiseError("ambiguity code " + describeCode($code) + " at position " +
                 convert.toString($i) + " has no thermodynamic parameters - resolve it first");
@@ -415,6 +445,7 @@ func requireUnambiguousDna(s as string) {
  * Sums the fractional charge of the two termini and the side chains of D, E, C,
  * Y (acidic) and H, K, R (basic). pKa values are the EMBOSS `iep` set, exported
  * through `aminoAcid` and the `PKA_*` constants. Decreases monotonically with pH.
+ * Any finite pH is accepted; far outside 0..14 the fractions saturate.
  *
  * @param p {string} a protein sequence
  * @param ph {float} the pH to evaluate at
@@ -473,20 +504,37 @@ func ionisableCounts(clean as string) {
  * @internal
  */
 func chargeOfCounts(counts as list of int, present as list of int, ph as float) {
-    def nTerminus as float init 1.0 / (1.0 + math.pow(10.0, $ph - PKA_N_TERMINUS));
-    def cTerminus as float init 1.0 / (1.0 + math.pow(10.0, PKA_C_TERMINUS - $ph));
-    def charge as float init $nTerminus - $cTerminus;
+    def charge as float init protonated($ph - PKA_N_TERMINUS) - protonated(PKA_C_TERMINUS - $ph);
     for (def code in $present) {
         def many as int init $counts[$code];
         def sign as int init CHARGE_BY_CODE[$code];
         def acidity as float init PKA_BY_CODE[$code];
         if ($sign > 0) {
-            $charge = $charge + $many / (1.0 + math.pow(10.0, $ph - $acidity));
+            $charge = $charge + $many * protonated($ph - $acidity);
         } elseif ($sign < 0) {
-            $charge = $charge - $many / (1.0 + math.pow(10.0, $acidity - $ph));
+            $charge = $charge - $many * protonated($acidity - $ph);
         }
     }
     return $charge;
+}
+
+/**
+ * `1 / (1 + 10^x)`, the Henderson-Hasselbalch fraction, without overflow.
+ *
+ * For positive `x` it is evaluated as `10^-x / (1 + 10^-x)`, whose power
+ * underflows towards 0 instead of overflowing, so any finite pH gives a finite
+ * charge.
+ *
+ * @param x {float} pH - pKa for a base, pKa - pH for an acid
+ * @return {float} the fraction, in [0, 1]
+ * @internal
+ */
+func protonated(x as float) {
+    if ($x > 0.0) {
+        def small as float init math.pow(10.0, -$x);
+        return $small / (1.0 + $small);
+    }
+    return 1.0 / (1.0 + math.pow(10.0, $x));
 }
 
 /**

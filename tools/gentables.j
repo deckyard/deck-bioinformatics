@@ -1,7 +1,7 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # Generate src/topics/tabledata.j.
 #
@@ -600,7 +600,7 @@ for (def a in strings.chars('ARNDCQEGHILKMFPSTWYV')) {
 
 emit('# SPDX-License-Identifier: LGPL-3.0-only');
 emit('# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>');
-emit('# pragma-jennifer-version: >=0.25.0');
+emit('# pragma-jennifer-version: >=0.26.0');
 emit('');
 emit('# bioinformatics - table data: the reference data the rest of the deck reads.');
 emit('# Spliced into bioinformatics.j via include - not a standalone module.');
@@ -1024,6 +1024,24 @@ for (def name in $alphabets) {
     }
     emitBlock($name, 'bool', denseList($values, 'false'));
 }
+
+# The same alphabets as anchored regex classes, for the clean-input fast path in
+# normalizeBy: built here once rather than per call.
+emit('# The *_ADMITS alphabets as anchored patterns: a string matching one is');
+emit('# already clean (admitted uppercase residues only). Read by normalizeBy.');
+for (def name in $alphabets) {
+    def cls as string init '';
+    for (def one in strings.chars($alphabets[$name])) {
+        def code as int init codeOf($one);
+        if ($code >= 65 and $code <= 90) {
+            $cls = $cls + $one;
+        } else {
+            $cls = $cls + "\\" + $one;
+        }
+    }
+    emit("def const " + $name + "_PATTERN as string init '^[" + $cls + "]+$';");
+}
+emit('');
 
 emit('# Residue properties by byte value, for gravy / molecularWeight / netCharge.');
 emit('# A residue with no entry reads as the zero value, so callers must still ask');
