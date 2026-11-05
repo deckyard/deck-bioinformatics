@@ -1008,8 +1008,8 @@ emit('');
 # ------------------------------------------------- dense by-code lookup tables
 
 emit('# Membership by byte value, for the validation loops in core.j. Same content');
-emit('# as the *_CODES maps above; a list index is cheaper than a map lookup and');
-emit('# these run over every residue of every input the deck is given.');
+emit('# as the *_CODES maps in core.j; a list index is cheaper than a map lookup');
+emit('# and these run over every residue of every input the deck is given.');
 
 def alphabets as map of string to string init {
     'DNA_ADMITS': 'ACGTRYSWKMBDHVN',

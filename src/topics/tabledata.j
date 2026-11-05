@@ -1633,8 +1633,8 @@ export def const BLOSUM62 as map of string to int init {
 };
 
 # Membership by byte value, for the validation loops in core.j. Same content
-# as the *_CODES maps above; a list index is cheaper than a map lookup and
-# these run over every residue of every input the deck is given.
+# as the *_CODES maps in core.j; a list index is cheaper than a map lookup
+# and these run over every residue of every input the deck is given.
 def const DNA_ADMITS as list of bool init [
     false,
     false,
