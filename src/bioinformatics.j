@@ -22,7 +22,7 @@
  * boundary. Tests: `bioinformatics_test.j`.
  *
  * @module bioinformatics
- * @version 0.2.0-dev
+ * @version 0.3.0-dev
  * @license LGPL-3.0-only
  * @see https://www.bioinformatics.org/sms2/
  * @see https://docs.jennifer-lang.dev/milestones.html#m274---bioinformatics
