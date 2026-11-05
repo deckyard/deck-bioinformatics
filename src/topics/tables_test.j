@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - white-box tests for the tables topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -463,4 +463,13 @@ func testTerminusPkaValues() {
 func testWaterMasses() {
     testing.assertTrue(WATER_MONO_MASS < WATER_AVG_MASS);
     testing.assertTrue(WATER_AVG_MASS > 18.0 and WATER_AVG_MASS < 18.1);
+}
+
+func testMatchesIupacReadsUAsT() {
+    # U and T are one base on either side of the relation
+    testing.assertTrue(matchesIupac("N", "U"));
+    testing.assertTrue(matchesIupac("W", "U"));
+    testing.assertTrue(matchesIupac("T", "U"));
+    testing.assertTrue(matchesIupac("U", "T"));
+    testing.assertFalse(matchesIupac("S", "U"));
 }

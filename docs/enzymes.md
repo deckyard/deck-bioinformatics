@@ -90,6 +90,6 @@ which two in-site offsets cannot describe. They are absent:
 Sites and cut positions are hand-curated from published enzyme specifications,
 not imported from REBASE, whose data carries its own terms. A new enzyme is a
 four-field row in `tools/genenzymes.j`. The generator asserts that names are
-unique, every site is in the DNA IUPAC alphabet and palindromic, and both cut
-offsets fall inside the site; the test suite re-derives the overhang labels and
+unique, every site is in the DNA IUPAC alphabet and palindromic, both cut
+offsets fall inside the site, and `cutBottom == len(site) - cutTop`; the test suite re-derives the overhang labels and
 re-checks the palindromes.

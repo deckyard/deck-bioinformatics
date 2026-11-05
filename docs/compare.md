@@ -92,6 +92,10 @@ Local boundaries are soft. With +2/-1 scoring, random sequence still scores
 above zero on average, so the reported span can reach past the region of
 interest.
 
+When no residue pair scores above zero the local alignment is empty: `length`
+and `score` 0, empty rows, `startA` and `startB` equal to the two lengths (an
+empty slice at the end). The readouts and `formatAlignment` raise on it.
+
 ## Distances
 
 ```jennifer
@@ -111,7 +115,9 @@ each costing one. A sequence shifted by one position (12 bases in
 | edit | 2 (one deletion, one insertion) |
 
 Edit distance keeps two rows of `len(b) + 1` entries: O(m) memory in the second
-sequence's length, O(n*m) time, and no `maxCells` limit.
+sequence's length, O(n*m) time at about 2 microseconds a cell. `maxCells` does
+not apply; instead `len(a) * len(b)` above `MAX_EDIT_DISTANCE_CELLS` (2 500 000,
+about 5 seconds; 1500 x 1500 fits) raises before any work.
 
 ## Performance and the memory limit
 

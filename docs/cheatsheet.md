@@ -124,12 +124,12 @@ suffix makes a default explicit.
 | Function | Returns | Notes |
 | - | - | - |
 | `find(s, pattern)` | `list of Match` | exact, overlapping |
-| `findIupac(s, pattern)` | `list of Match` | IUPAC codes in the pattern |
+| `findIupac(s, pattern)` | `list of Match` | IUPAC codes in the pattern; `U` reads as `T` |
 | `findFuzzy(s, pattern, maxMismatches)` | `list of Match` | substitutions only |
 | `orfs(nt, minAa)` | `list of Orf` | six frames, standard code |
 | `orfsWith(nt, minAa, tableId)` | `list of Orf` | NCBI table id |
-| `cpgIslands(s, window, minGc, minObsExp)` | `list of Region` | classic: 200, 50.0, 0.6 |
-| `restrictionSites(s, names)` | `list of Site` | ordered by cut, then enzyme |
+| `cpgIslands(s, window, minGc, minObsExp)` | `list of Region` | classic: 200, 50.0, 0.6; exact thresholds |
+| `restrictionSites(s, names)` | `list of Site` | ordered by cut, then enzyme; repeated names once |
 | `enzymesCutting(s)` | `list of string` | enzymes with a site |
 | `nonCutters(s)` | `list of string` | enzymes without one |
 | `restrictionDigest(s, names, circular)` | `list of Fragment` | cuts at `cutTop` |
@@ -191,13 +191,13 @@ suffix makes a default explicit.
 
 | Function | Returns | Notes |
 | - | - | - |
-| `parseFasta(text)` | `list of Record` | case preserved |
-| `writeFasta(records)` | `string` | wrapped at `FASTA_WIDTH` |
+| `parseFasta(text)` | `list of Record` | case preserved; `;` lines skipped |
+| `writeFasta(records)` | `string` | wrapped at `FASTA_WIDTH`; raises on fields that would not parse back |
 | `writeFastaWrapped(records, width)` | `string` | |
 | `wrap(s, width)` | `string` | no trailing newline |
 | `toPlain(text)` | `string` | strip headers, digits, whitespace |
-| `parseFastq(text)` | `list of Read` | four-line or wrapped |
-| `writeFastq(reads)` | `string` | four-line form |
+| `parseFastq(text)` | `list of Read` | four-line or wrapped; quality bytes 33..126 |
+| `writeFastq(reads)` | `string` | four-line form; raises on fields that would not parse back |
 | `fastqToFasta(reads)` | `list of Record` | |
 | `qualityScores(r)` | `list of int` | Phred+33 |
 | `qualityScoresWith(r, offset)` | `list of int` | `PHRED33` or `PHRED64` |
@@ -236,7 +236,7 @@ suffix makes a default explicit.
 | `randomDna(n)` | `string` | uniform over `DNA_BASES` |
 | `randomRna(n)` | `string` | uniform over `RNA_BASES` |
 | `randomProtein(n)` | `string` | uniform over `STANDARD_RESIDUES` |
-| `randomDnaWith(n, weights)` | `string` | relative weights |
+| `randomDnaWith(n, weights)` | `string` | relative weights, single-residue keys; order-independent |
 | `randomRnaWith(n, weights)` | `string` | |
 | `randomProteinWith(n, weights)` | `string` | |
 | `shuffle(s)` | `string` | Fisher-Yates, composition kept |
@@ -264,11 +264,12 @@ suffix makes a default explicit.
 | `percentGaps(al)` | `float` | |
 | `formatAlignment(al, width)` | `string` | EMBOSS-style blocks |
 | `hammingDistance(a, b)` | `int` | equal lengths only |
-| `editDistance(a, b)` | `int` | Levenshtein |
+| `editDistance(a, b)` | `int` | Levenshtein, `len(a) * len(b) <= MAX_EDIT_DISTANCE_CELLS` |
 
 | Constant | Value | Meaning |
 | - | - | - |
 | `DEFAULT_MAX_ALIGNMENT_CELLS` | `1000000` | default `maxCells`, about 1 GB |
+| `MAX_EDIT_DISTANCE_CELLS` | `2500000` | `editDistance` cells, about 5 s |
 
 ### `AlignOptions`
 
@@ -305,7 +306,7 @@ suffix makes a default explicit.
 | `startCodons(id)` | `list of string` | |
 | `expandIupac(code)` | `string` | `R` to `AG` |
 | `iupacClass(code)` | `string` | `R` to `[AG]` |
-| `matchesIupac(code, base)` | `bool` | one-way |
+| `matchesIupac(code, base)` | `bool` | one-way; `U` reads as `T` |
 | `aminoAcid(code)` | `AminoAcid` | one- or three-letter code |
 | `aminoAcids()` | `list of AminoAcid` | 22 records |
 | `hasAminoAcid(code)` | `bool` | |

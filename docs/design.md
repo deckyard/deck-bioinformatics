@@ -86,7 +86,8 @@ where a transcription slip is invisible in review. `tools/gentables.j` and
 `tools/genenzymes.j` generate them and hold the data in reviewable form: each
 alternative code as a short diff from the standard one. They assert invariants
 before writing: BLOSUM62 symmetric across all 576 pairs, every enzyme site
-palindromic with its cut offsets inside the site.
+palindromic with its cut offsets inside the site and `cutBottom == len(site) -
+cutTop`.
 
 Generated data and hand-written accessors live in separate files (`tabledata.j`
 and `tables.j`, `enzymedata.j` and `enzymes.j`), so a generator only overwrites

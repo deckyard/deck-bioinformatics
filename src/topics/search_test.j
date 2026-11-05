@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - white-box tests for the search topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -505,5 +505,145 @@ func testPresenceScanAgreesWithTheFullScan() {
     for (def e in enzymes()) {
         def found as bool init len(restrictionSites(POLYLINKER, [$e.name])) > 0;
         testing.assertEqual(lists.contains($cutting, $e.name), $found);
+    }
+}
+
+# ------------------------------------------------------- review fixes (search)
+
+func testFindIupacOnRna() {
+    # T and U are one base: N admits U, W admits A and U, and the reported text
+    # keeps the subject's spelling
+    def hits as list of Match init findIupac("ACGU", "N");
+    testing.assertEqual(len($hits), 4);
+    testing.assertEqual($hits[3].text, "U");
+    testing.assertEqual(len(findIupac("AUAU", "W")), 4);
+    # Y is C or T(U): C-N at 0, U-N at 1, C-U at 2
+    testing.assertEqual(len(findIupac("CUCU", "YN")), 3);
+}
+
+func testFindIupacCrossesTAndU() {
+    # an RNA pattern finds DNA and a DNA pattern finds RNA; text is the subject's
+    def onDna as list of Match init findIupac("ACGT", "ACGU");
+    testing.assertEqual(len($onDna), 1);
+    testing.assertEqual($onDna[0].text, "ACGT");
+    def onRna as list of Match init findIupac("ACGU", "ACGT");
+    testing.assertEqual(len($onRna), 1);
+    testing.assertEqual($onRna[0].text, "ACGU");
+}
+
+func testDegenerateHitsAreMergedByStart() {
+    # CCWGG expands to CCAGG and CCTGG; their hits interleave at 0, 5 and 10
+    def hits as list of Match init findIupac("CCAGGCCTGGCCAGG", "CCWGG");
+    testing.assertEqual(len($hits), 3);
+    testing.assertEqual($hits[0].start, 0);
+    testing.assertEqual($hits[0].text, "CCAGG");
+    testing.assertEqual($hits[1].start, 5);
+    testing.assertEqual($hits[1].text, "CCTGG");
+    testing.assertEqual($hits[2].start, 10);
+    testing.assertEqual($hits[2].text, "CCAGG");
+}
+
+func testExpandedScanAgreesWithInterpretedScan() {
+    # cross-implementation: the expansion path and the interpreted fallback must
+    # report the same matches for every degenerate site in the table
+    math.randSeed(11);
+    def dna as bytes init convert.bytesFromString(randomDna(3000), "utf-8");
+    for (def e in enzymes()) {
+        if (isExactSite($e.site)) {
+            continue;
+        }
+        def fast as list of Match init matchIupac($dna, $e.site, 1);
+        def slow as list of Match init scanIupac($dna, $e.site, 1);
+        testing.assertEqual(len($fast), len($slow));
+        for (def i as int init 0; $i < len($fast); $i = $i + 1) {
+            testing.assertEqual($fast[$i].start, $slow[$i].start);
+            testing.assertEqual($fast[$i].text, $slow[$i].text);
+        }
+    }
+}
+
+func testOrfMinimumLengthBoundary() {
+    # ATG AAA TAA is M K then stop: two residues, reported at minAa 2, not at 3
+    def two as list of Orf;
+    for (def o in orfs("ATGAAATAA", 2)) {
+        if ($o.frame == 1) {
+            $two[] = $o;
+        }
+    }
+    testing.assertEqual(len($two), 1);
+    testing.assertEqual($two[0].protein, "MK");
+    for (def o in orfs("ATGAAATAA", 3)) {
+        testing.assertTrue($o.frame != 1);
+    }
+}
+
+func testCpgThresholdIsExact() {
+    # CGGGGGGGGGGCA: C 2, G 10, one CpG in a 13-base window. expected = 2*10/13,
+    # so obs/exp = 13/20 = 0.65 exactly - it must meet a 0.65 threshold
+    def islands as list of Region init cpgIslands("CGGGGGGGGGGCA", 13, 50.0, 0.65);
+    testing.assertEqual(len($islands), 1);
+    testing.assertEqual($islands[0].obsExp, 0.65);
+    testing.assertEqual(len(cpgIslands("CGGGGGGGGGGCA", 13, 50.0, 0.66)), 0);
+}
+
+func testCpgDecimalFallbackAgrees() {
+    # thresholds with more than nine decimal places take the decimal path;
+    # 0.65 lies between these two
+    testing.assertEqual(len(cpgIslands("CGGGGGGGGGGCA", 13, 50.0, 0.6499999999)), 1);
+    testing.assertEqual(len(cpgIslands("CGGGGGGGGGGCA", 13, 50.0, 0.6500000001)), 0);
+    # GC is 12/13 = 92.307692307...%: just under passes, just over fails
+    testing.assertEqual(len(cpgIslands("CGGGGGGGGGGCA", 13, 92.3076923076, 0.6)), 1);
+    testing.assertEqual(len(cpgIslands("CGGGGGGGGGGCA", 13, 92.3076923077, 0.6)), 0);
+}
+
+func testRepeatedEnzymeNamesCountOnce() {
+    def sites as list of Site init restrictionSites("AAGAATTCAA", ["EcoRI", "ecori", " ECORI "]);
+    testing.assertEqual(len($sites), 1);
+}
+
+func testReverseStrandCutUsesCutBottom() {
+    # A hand-built non-palindromic enzyme, GACGCA cut G^ACG_CA (cutTop 1,
+    # cutBottom 4). The subject carries only its reverse complement, TGCGTC, at
+    # 4..10. On the reverse complement of the 14-base subject the site sits at
+    # 4..10 and the enzyme's bottom-strand cut - our forward strand - is at
+    # 4 + 4 = 8 there, which is 14 - 8 = 6 on the subject.
+    def e as Enzyme init Enzyme{
+        name: "TestI",
+        site: "GACGCA",
+        cutTop: 1,
+        cutBottom: 4,
+        overhang: "5'",
+        overhangLength: 3
+    };
+    def sites as list of Site init enzymeSites(
+        convert.bytesFromString("AAAATGCGTCAAAA", "utf-8"),
+        $e);
+    testing.assertEqual(len($sites), 1);
+    testing.assertEqual($sites[0].strand, -1);
+    testing.assertEqual($sites[0].start, 4);
+    testing.assertEqual($sites[0].end, 10);
+    testing.assertEqual($sites[0].site, "TGCGTC");
+    testing.assertEqual($sites[0].cut, 6);
+    def m as Match init Match{start: 4, end: 10, text: "TGCGTC", strand: -1, mismatches: 0};
+    testing.assertEqual(siteFrom($e, $m).cut, 6);
+}
+
+func testKeyedSortAgreesWithMergeSort() {
+    # cross-implementation: the native keyed sort and the merge sort it replaced
+    # must give the same order, ties included
+    math.randSeed(5);
+    def hay as bytes init convert.bytesFromString(randomDna(4000), "utf-8");
+    def all as list of Site;
+    for (def e in enzymes()) {
+        for (def site in enzymeSites($hay, $e)) {
+            $all[] = $site;
+        }
+    }
+    def keyed as list of Site init sortSites($all);
+    def merged as list of Site init mergeSortSites($all);
+    testing.assertEqual(len($keyed), len($merged));
+    for (def i as int init 0; $i < len($keyed); $i = $i + 1) {
+        testing.assertEqual($keyed[$i].enzyme, $merged[$i].enzyme);
+        testing.assertEqual($keyed[$i].start, $merged[$i].start);
     }
 }

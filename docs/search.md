@@ -27,11 +27,15 @@ their own patterns.
 
 IUPAC matching is one-way: a pattern's `N` admits a subject's `A`, a pattern's
 `A` does not admit a subject's `N`. `text` is the concrete subsequence found, so
-a `CCWGG` hit says whether it was `CCAGG` or `CCTGG`.
+a `CCWGG` hit says whether it was `CCAGG` or `CCTGG`. `T` and `U` are one base:
+subject and pattern are matched with `U` read as `T`, and `text` keeps the
+subject's spelling.
 
 ```jennifer
 len(bioseq.findIupac("AAAA", "N"));   # 4
 len(bioseq.findIupac("NNNN", "A"));   # 0
+len(bioseq.findIupac("AUAU", "W"));   # 4
+bioseq.findIupac("ACGU", "ACGT")[0].text;   # "ACGU"
 ```
 
 `findFuzzy` counts substitutions only; each match carries `mismatches`. Use
@@ -94,6 +98,11 @@ bioseq.gcContent($gcOnly);                             # 100.0
 len(bioseq.cpgIslands($gcOnly, 20, 50.0, 0.6));        # 0
 ```
 
+Both tests are exact. Each threshold is taken at its shortest decimal form
+(`0.65` is 65/100) and compared against the window's integer counts, so a window
+whose obs/exp is exactly 0.65 meets a 0.65 threshold. `gc` and `obsExp` in the
+result are floats.
+
 Qualifying windows that touch or overlap are merged into one `Region`, whose
 `gc` and `obsExp` are recomputed over the merged span. A window straddling an
 island edge can still qualify, so reported spans run a little wider than the
@@ -108,10 +117,10 @@ bioseq.restrictionSites("AAACCAGGTTTCCTGGAAA", ["EcoRII"]);
 ```
 
 Sites are ordered by `cut`, then enzyme name. `site` is the concrete match for a
-degenerate recognition sequence. Names are case-insensitive; an unknown name
-raises. Every site in the table is palindromic, so one forward scan finds them
+degenerate recognition sequence. Names are case-insensitive; a name repeated in
+`names` (in any case) is searched once; an unknown name raises. Every site in the table is palindromic, so one forward scan finds them
 all (a non-palindromic site would be searched on both strands and reported with
-`strand: -1`). The sequence is scanned as linear: a site spanning the origin of
+`strand: -1`, its `cut` mirrored as `end - cutBottom`). The sequence is scanned as linear: a site spanning the origin of
 a circular sequence is not found.
 
 ```jennifer
@@ -132,8 +141,9 @@ bioseq.restrictionDigest($plasmid, ["EcoRI", "BamHI"], true);    # circular
 Cuts are on the top strand at each enzyme's `cutTop`, which sets the fragment
 lengths; the bottom-strand stagger is described by
 [`Enzyme.overhang`](enzymes.md#cut-geometry). Coinciding cuts count once; a cut
-at offset 0 or at the end is ignored. Fragments are ordered by `start` and,
-concatenated in order, give back the original sequence.
+at offset 0 or at the end is ignored. Fragments are ordered by `start`.
+Concatenated in order, linear fragments give back the original sequence;
+circular ones give it rotated to begin at the first cut.
 
 | | linear | circular |
 | - | - | - |
@@ -146,19 +156,22 @@ than its `start`.
 
 ## Performance
 
-An exact pattern is one native `binary.indexOf` scan. A degenerate one is
-expanded into its concrete sequences (`CCWGG` is two, `GANTC` four), each
-scanned natively; only one expanding past 1024 variants falls back to an
+An exact pattern is one native `binary.indexOf` scan. A degenerate one, in
+`findIupac` and the restriction verbs alike, is expanded into its concrete
+sequences (`CCWGG` is two, `GANTC` four), each scanned natively and the hits
+merged by position; only one expanding past 1024 variants falls back to an
 interpreted scan of about 3 microseconds per position. 67 of the 76 recognition
 sequences are exact.
 
-| on a 200 kb sequence | |
+| on a 200 kb random sequence | |
 | - | - |
-| `enzymesCutting` over the whole table | ~1.2 s |
-| the same, before native scanning | ~13.6 s |
+| `enzymesCutting` over the whole table | ~7 ms |
+| `restrictionSites` for `EcoRII` (`CCWGG`, 371 sites) | ~20 ms |
+| `restrictionDigest` with every enzyme (about 10 000 sites) | ~0.4 s |
+| `orfs`, `minAa` 100 | ~1.9 s |
 
-The rest is validation: every public verb normalises its input once, about half
-a second per 200 kb, which is the floor for this topic. `restrictionSites`
+Clean uppercase input passes validation in one native match; input that needs
+normalising (case, whitespace) costs an interpreted pass. `restrictionSites`
 scans once per enzyme, so for "which enzymes cut" use `enzymesCutting`, which
-stops at each enzyme's first site. Sites are merge-sorted, O(n log n) in the
-number of sites.
+stops at each enzyme's first site. Sites are ordered by one native sort of
+integer keys. `orfs` translates only frames that reach `minAa`.

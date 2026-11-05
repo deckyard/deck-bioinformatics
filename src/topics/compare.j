@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - compare: pairwise alignment and distance.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -567,7 +567,16 @@ export func formatAlignment(al as Alignment, width as int) {
     if ($width <= 0) {
         raiseError("block width must be positive, got " + convert.toString($width));
     }
-    def out as string init "";
+    # Rows are cut from byte buffers and the blocks joined once at the end: a
+    # rune-indexed string slice costs O(offset) and `+` on the growing result
+    # copied it per block, which made 80 000 columns take half a second.
+    def rowA as bytes init convert.bytesFromString($al.a, "utf-8");
+    def rowB as bytes init convert.bytesFromString($al.b, "utf-8");
+    def rowM as bytes init convert.bytesFromString($al.markup, "utf-8");
+    if (len($rowA) != $al.length or len($rowB) != $al.length or len($rowM) != $al.length) {
+        raiseError("the alignment rows hold non-ASCII characters; residues, gaps and markup are ASCII");
+    }
+    def lines as list of string;
     def posA as int init $al.startA + 1;
     def posB as int init $al.startB + 1;
     def at as int init 0;
@@ -576,33 +585,33 @@ export func formatAlignment(al as Alignment, width as int) {
         if ($stop > $al.length) {
             $stop = $al.length;
         }
-        def chunkA as string init $al.a[$at..$stop];
-        def chunkB as string init $al.b[$at..$stop];
-        def usedA as int init countResidues2($chunkA);
-        def usedB as int init countResidues2($chunkB);
-        $out = $out + io.sprintf("%d|pad=6 %s\n", $posA, $chunkA);
-        $out = $out + io.sprintf("%s|pad=6 %s\n", "", $al.markup[$at..$stop]);
-        $out = $out + io.sprintf("%d|pad=6 %s\n\n", $posB, $chunkB);
-        $posA = $posA + $usedA;
-        $posB = $posB + $usedB;
+        def chunkA as bytes init binary.slice($rowA, $at, $stop);
+        def chunkB as bytes init binary.slice($rowB, $at, $stop);
+        $lines[] = io.sprintf("%d|pad=6 %s\n", $posA, convert.stringFromBytes($chunkA, "utf-8"));
+        $lines[] = io.sprintf(
+            "%s|pad=6 %s\n",
+            "",
+            convert.stringFromBytes(binary.slice($rowM, $at, $stop), "utf-8"));
+        $lines[] = io.sprintf("%d|pad=6 %s\n\n", $posB, convert.stringFromBytes($chunkB, "utf-8"));
+        $posA = $posA + countResidues2($chunkA);
+        $posB = $posB + countResidues2($chunkB);
         $at = $stop;
     }
-    return $out;
+    return strings.join($lines, "");
 }
 
 /**
- * Count the non-gap characters in an aligned chunk.
+ * Count the non-gap bytes in an aligned chunk.
  *
- * @param chunk {string} a slice of an aligned sequence
+ * @param chunk {bytes} a slice of an aligned row
  * @return {int} how many real residues it holds
  * @internal
  */
-func countResidues2(chunk as string) {
+func countResidues2(chunk as bytes) {
     def n as int init 0;
-    def buf as bytes init convert.bytesFromString($chunk, "utf-8");
-    def width as int init len($buf);
+    def width as int init len($chunk);
     for (def i as int init 0; $i < $width; $i = $i + 1) {
-        if ($buf[$i] != 45) {
+        if ($chunk[$i] != 45) {
             $n = $n + 1;
         }
     }
@@ -644,18 +653,28 @@ export func hammingDistance(a as string, b as string) {
 }
 
 /**
+ * The largest `len(a) * len(b)` that `editDistance` computes.
+ *
+ * Each cell costs about 2 microseconds, so the limit is about 5 seconds: two
+ * 1500-residue sequences (2 250 000 cells) fit, two of 1600 do not. Memory is
+ * linear and does not bind.
+ */
+export def const MAX_EDIT_DISTANCE_CELLS as int init 2500000;
+
+/**
  * The fewest single-residue edits that turn one sequence into the other.
  *
  * Levenshtein distance: insertions, deletions and substitutions each cost one.
  * Two rows of `len(b) + 1` entries instead of a full matrix, so memory is O(m)
- * in the second sequence's length (pass the shorter one second); time is O(n*m).
- * `maxCells` does not apply.
+ * in the second sequence's length (pass the shorter one second); time is O(n*m)
+ * at about 2 microseconds a cell, so `len(a) * len(b)` is capped at
+ * `MAX_EDIT_DISTANCE_CELLS`. `AlignOptions.maxCells` does not apply.
  *
  * @param a {string} the first sequence
  * @param b {string} the second sequence
  * @return {int} the edit distance
  * @throws {Error} kind "bioinformatics" when either sequence is empty or holds a
- *         non-residue
+ *         non-residue, or `len(a) * len(b)` exceeds `MAX_EDIT_DISTANCE_CELLS`
  * @example bioseq.editDistance("ATGC", "AGC") == 1
  */
 export func editDistance(a as string, b as string) {
@@ -665,6 +684,12 @@ export func editDistance(a as string, b as string) {
     def bx as bytes init convert.bytesFromString($right, "utf-8");
     def n as int init len($ax);
     def m as int init len($bx);
+    if ($n > MAX_EDIT_DISTANCE_CELLS // $m) {
+        raiseError("edit distance of " + convert.toString($n) + " against " + convert.toString($m) +
+            " residues needs " + convert.toString($n) + " x " + convert.toString($m) +
+            " cells, over MAX_EDIT_DISTANCE_CELLS (" + convert.toString(MAX_EDIT_DISTANCE_CELLS) +
+            "); compare a smaller region");
+    }
     def previous as list of int;
     for (def j as int init 0; $j <= $m; $j = $j + 1) {
         $previous[] = $j;

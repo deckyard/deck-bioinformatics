@@ -66,10 +66,13 @@ bioseq.expandIupac("R");            # "AG"
 bioseq.iupacClass("R");             # "[AG]"
 bioseq.matchesIupac("R", "G");      # true
 bioseq.matchesIupac("A", "N");      # false - one-way
+bioseq.matchesIupac("N", "U");      # true - U reads as T
 ```
 
 `IUPAC_DNA` and `IUPAC_RNA` map each code to the bases it admits; `A`, `C`, `G`,
 `T`/`U` map to themselves. Lookups take any case; a non-IUPAC character raises.
+`expandIupac` returns the DNA spelling (`N` is `"ACGT"`); `matchesIupac` and
+`findIupac` read `U` as `T` on both sides.
 
 | | | | |
 | - | - | - | - |

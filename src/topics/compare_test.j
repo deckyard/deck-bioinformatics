@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - white-box tests for the compare topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -443,4 +443,68 @@ func testWellFormedAlignmentsStillPass() {
         testing.assertTrue(percentIdentity($al) >= 0.0);
         testing.assertTrue(len(formatAlignment($al, 10)) > 0);
     }
+}
+
+# ------------------------------------------------------ review fixes (compare)
+
+func testFormatAlignmentExactText() {
+    # width 3 over AT-GC / ATTGC: block one consumes 2 residues of a and 3 of b,
+    # so block two is numbered 3 and 4. Positions are right-aligned in 6
+    # columns (the io `%d|pad=6` layout), the markup row's label is 6 spaces.
+    def al as Alignment init Alignment{
+        a: "AT-GC",
+        b: "ATTGC",
+        markup: "|| ||",
+        score: 0,
+        length: 5,
+        identities: 4,
+        similarities: 4,
+        gaps: 1,
+        startA: 0,
+        startB: 0
+    };
+    def want as string init "     1 AT-\n" + "       || \n" + "     1 ATT\n\n" +
+        "     3 GC\n" + "       ||\n" + "     4 GC\n\n";
+    testing.assertEqual(formatAlignment($al, 3), $want);
+}
+
+func testFormatAlignmentRejectsNonAscii() {
+    testing.assertThrows("formatNonAscii", "bioinformatics");
+}
+
+func formatNonAscii() {
+    formatAlignment(
+        Alignment{
+            a: "AÄ",
+            b: "AA",
+            markup: "| ",
+            score: 0,
+            length: 2,
+            identities: 1,
+            similarities: 1,
+            gaps: 0,
+            startA: 0,
+            startB: 0
+        },
+        10);
+}
+
+func testEditDistanceIsCapped() {
+    testing.assertThrows("editDistanceTooLarge", "bioinformatics");
+}
+
+func editDistanceTooLarge() {
+    # one cell over the limit, and cheap to validate
+    editDistance(strings.repeat("A", MAX_EDIT_DISTANCE_CELLS + 1), "A");
+}
+
+func testLocalWithNoPositivePairIsEmpty() {
+    # nothing scores above zero, so the best local alignment is empty; the
+    # starts are the sequence lengths, an empty slice at the end of each
+    def al as Alignment init alignLocal("AAAA", "CCCC", dnaOptions());
+    testing.assertEqual($al.length, 0);
+    testing.assertEqual($al.score, 0);
+    testing.assertEqual($al.a, "");
+    testing.assertEqual($al.startA, 4);
+    testing.assertEqual($al.startB, 4);
 }

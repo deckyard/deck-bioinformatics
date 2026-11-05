@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - tables: lookup over the reference data.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -142,7 +142,8 @@ export func iupacClass(code as string) {
  * Does an IUPAC code admit a given base?
  *
  * One-way: `N` admits `A`, `A` does not admit `N`. Pattern code first, observed
- * base second.
+ * base second. `T` and `U` are the same base on either side, as in `findIupac`:
+ * `matchesIupac("N", "U")` and `matchesIupac("T", "U")` are true.
  *
  * @param code {string} the IUPAC code from a pattern
  * @param base {string} the observed base
@@ -151,12 +152,12 @@ export func iupacClass(code as string) {
  * @example bioseq.matchesIupac("R", "G") == true
  */
 export func matchesIupac(code as string, base as string) {
-    def admitted as string init expandIupac($code);
+    def admitted as string init strings.replace(expandIupac($code), "U", "T");
     def observed as string init strings.upper($base);
     if (len($observed) != 1) {
         raiseError("expected a single base, got '" + $base + "'");
     }
-    return strings.contains($admitted, $observed);
+    return strings.contains($admitted, strings.replace($observed, "U", "T"));
 }
 
 # ---------------------------------------------------------------- amino acids

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # Generate src/topics/enzymedata.j.
 #
@@ -174,6 +174,14 @@ for (def e in $enzymes) {
     if ($flipped != $e.site) {
         fail($e.name + ': site ' + $e.site + ' is not palindromic (rc ' + $flipped + ')');
     }
+    # On a palindromic site the bottom strand is cut where the top strand would
+    # be, read from the other end. search.j's reverse-strand cut and the
+    # overhang derived below both rely on it.
+    if ($e.cutBottom != len($e.site) - $e.cutTop) {
+        fail($e.name + ': cutBottom ' + convert.toString($e.cutBottom) +
+            ' is not len(site) - cutTop = ' +
+            convert.toString(len($e.site) - $e.cutTop));
+    }
 }
 
 # ------------------------------------------------------------------- emission
@@ -186,7 +194,7 @@ func emit(line as string) {
 
 emit('# SPDX-License-Identifier: LGPL-3.0-only');
 emit('# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>');
-emit('# pragma-jennifer-version: >=0.25.0');
+emit('# pragma-jennifer-version: >=0.26.0');
 emit('');
 emit('# bioinformatics - enzymes: the restriction enzyme table.');
 emit('# Spliced into bioinformatics.j via include - not a standalone module.');

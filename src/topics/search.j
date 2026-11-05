@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.25.0
+# pragma-jennifer-version: >=0.26.0
 
 # bioinformatics - search: finding things inside a sequence.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -20,8 +20,9 @@
 # `binary.indexOf`, 200 kb in well under a millisecond. A degenerate pattern is
 # expanded into its concrete sequences, each searched natively (`CCWGG` is two
 # scans); only one that expands past `MAX_SITE_EXPANSION` falls back to the
-# interpreted scan, about 3 microseconds a position. Validation is the floor:
-# normalising 200 kb costs about half a second, once per public call.
+# interpreted scan, about 3 microseconds a position. Clean input passes
+# validation in one native regex match; input that needs normalising costs an
+# interpreted pass. A whole-table digest of 200 kb takes about 0.4 s.
 
 /**
  * One place a pattern was found.
@@ -62,7 +63,7 @@ export func find(s as string, pattern as string) {
     def subject as string init requireSequence($s);
     def needle as string init requireSequence($pattern);
     requireFits($subject, $needle);
-    return scanExact($subject, $needle, 1);
+    return scanExact(convert.bytesFromString($subject, "utf-8"), $needle, 1);
 }
 
 /**
@@ -70,8 +71,10 @@ export func find(s as string, pattern as string) {
  *
  * The pattern may use ambiguity codes: `GGWCC` matches `GGACC` and `GGTCC`. The
  * relation is one-way: a pattern's `N` admits a subject's `A`, a pattern's `A`
- * does not admit a subject's `N`. `Match.text` is the concrete subsequence
- * found. Overlapping occurrences are all reported.
+ * does not admit a subject's `N`. `T` and `U` are the same base: both subject
+ * and pattern are matched with `U` read as `T`, so an RNA pattern finds DNA and
+ * the reverse. `Match.text` is the concrete subsequence found, spelled as in the
+ * subject. Overlapping occurrences are all reported.
  *
  * @param s {string} the nucleotide sequence to search
  * @param pattern {string} the pattern, in IUPAC codes
@@ -79,39 +82,101 @@ export func find(s as string, pattern as string) {
  * @throws {Error} kind "bioinformatics" when either argument is empty or not a nucleic
  *         acid, or the pattern is longer than the sequence
  * @example bioseq.findIupac($dna, "GGWCC")
+ * @example bioseq.findIupac("ACGU", "N")   # four matches
  */
 export func findIupac(s as string, pattern as string) {
     def subject as string init requireNucleotide($s);
     def needle as string init requireNucleotide($pattern);
     requireFits($subject, $needle);
-    return matchIupac($subject, $needle, 1);
+    # U -> T keeps lengths and offsets, so the folded subject is searched and
+    # only the reported text is taken back from the unfolded one
+    def folded as string init strings.replace($subject, "U", "T");
+    def hay as bytes init convert.bytesFromString($folded, "utf-8");
+    def hits as list of Match init matchIupac($hay, strings.replace($needle, "U", "T"), 1);
+    if ($folded == $subject) {
+        return $hits;
+    }
+    def original as bytes init convert.bytesFromString($subject, "utf-8");
+    def out as list of Match;
+    for (def m in $hits) {
+        $m.text = convert.stringFromBytes(binary.slice($original, $m.start, $m.end), "utf-8");
+        $out[] = $m;
+    }
+    return $out;
 }
 
 /**
  * The IUPAC scan, over already-validated sequences.
  *
- * Each pattern position is expanded once into the bases it admits, then the
- * subject is walked. The expansion is at most four bases, so the inner test is
- * a handful of comparisons and the whole scan is O(n*m) with a tiny m.
+ * An exact pattern is one `scanExact`. A degenerate one is expanded by
+ * `expandSite` into its concrete sequences, each found by `scanExact`, and the
+ * hits merged by `start`; two variants are distinct strings of one length, so no
+ * offset is reported twice. Past `MAX_SITE_EXPANSION` variants it falls back to
+ * `scanIupac`. Callers fold `U` to `T` first: the expansion is DNA-spelled.
  *
- * @param subject {string} a validated nucleotide sequence
- * @param needle {string} a validated IUPAC pattern
+ * @param hay {bytes} a validated nucleotide sequence, `U` folded to `T`, as
+ *        bytes so the many scans of one subject share one conversion
+ * @param needle {string} a validated IUPAC pattern, `U` folded to `T`
  * @param strand {int} the strand label to stamp on each match
- * @return {list of Match} every occurrence
+ * @return {list of Match} every occurrence, in ascending order of `start`
  * @internal
  */
-func matchIupac(subject as string, needle as string, strand as int) {
-    # An exact pattern is a plain substring, so hand the scan to `binary.indexOf`
-    # exactly as `find` does. Sixty-seven of the seventy-six recognition
-    # sequences are exact, so this is the path a restriction map normally takes.
+func matchIupac(hay as bytes, needle as string, strand as int) {
+    # Sixty-seven of the seventy-six recognition sequences are exact, so this is
+    # the path a restriction map normally takes.
     if (isExactSite($needle)) {
-        return scanExact($subject, $needle, $strand);
+        return scanExact($hay, $needle, $strand);
     }
+    def variants as list of string init expandSite($needle, MAX_SITE_EXPANSION);
+    if (len($variants) == 0) {
+        return scanIupac($hay, $needle, $strand);
+    }
+    def all as list of Match;
+    def runs as int init 0;
+    for (def variant in $variants) {
+        def hits as list of Match init scanExact($hay, $variant, $strand);
+        if (len($hits) > 0) {
+            $runs = $runs + 1;
+        }
+        for (def m in $hits) {
+            $all[] = $m;
+        }
+    }
+    if ($runs < 2) {
+        return $all;
+    }
+    # starts are unique, so a native sort of the starts plus a start -> index
+    # map orders the hits without an interpreted comparator
+    def starts as list of int;
+    def at as map of int to int;
+    for (def i as int init 0; $i < len($all); $i = $i + 1) {
+        $starts[] = $all[$i].start;
+        $at[$all[$i].start] = $i;
+    }
+    def out as list of Match;
+    for (def start in lists.sort($starts)) {
+        $out[] = $all[$at[$start]];
+    }
+    return $out;
+}
+
+/**
+ * The interpreted IUPAC scan, for a pattern too ambiguous to expand.
+ *
+ * Each pattern position is expanded once into the bases it admits, then the
+ * subject is walked: O(n*m), about 3 microseconds a position.
+ *
+ * @param hay {bytes} a validated nucleotide sequence, `U` folded to `T`
+ * @param needle {string} a validated IUPAC pattern, `U` folded to `T`
+ * @param strand {int} the strand label to stamp on each match
+ * @return {list of Match} every occurrence, in ascending order of `start`
+ * @internal
+ */
+func scanIupac(hay as bytes, needle as string, strand as int) {
     def expansions as list of bytes;
     for (def code in strings.chars($needle)) {
         $expansions[] = convert.bytesFromString(expandIupac($code), "utf-8");
     }
-    def hay as bytes init convert.bytesFromString($subject, "utf-8");
     def m as int init len($needle);
     def anchor as int init anchorByte($expansions[0]);
     def last as int init len($hay) - $m;
@@ -144,14 +209,13 @@ func matchIupac(subject as string, needle as string, strand as int) {
  * round searches the remaining suffix and the offset advances one past the hit,
  * so overlapping occurrences are all reported.
  *
- * @param subject {string} a validated sequence
+ * @param hay {bytes} a validated sequence
  * @param needle {string} an exact pattern
  * @param strand {int} the strand label to stamp on each match
  * @return {list of Match} every occurrence
  * @internal
  */
-func scanExact(subject as string, needle as string, strand as int) {
-    def hay as bytes init convert.bytesFromString($subject, "utf-8");
+func scanExact(hay as bytes, needle as string, strand as int) {
     def pin as bytes init convert.bytesFromString($needle, "utf-8");
     def m as int init len($pin);
     def n as int init len($hay);
@@ -414,7 +478,7 @@ func collectOrfs(
                 $openAt = $i;
             }
         } elseif (maps.has($table, $codon) and $table[$codon] == "*") {
-            for (def o in recordOrf($strandSequence, $openAt, $i + 3, $frame, $table, $minAa, true)) {
+            for (def o in recordOrf($strandBytes, $openAt, $i + 3, $frame, $table, $minAa, true)) {
                 $out[] = $o;
             }
             $openAt = -1;
@@ -425,7 +489,7 @@ func collectOrfs(
     # a fragment it usually means the gene continues past the sequence you have
     if ($openAt >= 0) {
         def last as int init $openAt + ($n - $openAt) // 3 * 3;
-        for (def o in recordOrf($strandSequence, $openAt, $last, $frame, $table, $minAa, false)) {
+        for (def o in recordOrf($strandBytes, $openAt, $last, $frame, $table, $minAa, false)) {
             $out[] = $o;
         }
     }
@@ -435,9 +499,12 @@ func collectOrfs(
 /**
  * Build one `Orf`, mapping reverse-strand coordinates back to the original.
  *
- * @param strandSequence {string} the strand as read
- * @param from {int} start offset within `strandSequence`
- * @param upto {int} end offset within `strandSequence`, half-open
+ * The length filter runs on the codon count before anything is sliced or
+ * translated, so frames shorter than `minAa` cost nothing.
+ *
+ * @param strandBytes {bytes} the strand as read
+ * @param from {int} start offset within `strandBytes`
+ * @param upto {int} end offset within `strandBytes`, half-open
  * @param frame {int} the signed frame number
  * @param table {map of string to string} the genetic code
  * @param minAa {int} the shortest protein to report
@@ -446,7 +513,7 @@ func collectOrfs(
  * @internal
  */
 func recordOrf(
-    strandSequence as string,
+    strandBytes as bytes,
     from as int,
     upto as int,
     frame as int,
@@ -454,16 +521,24 @@ func recordOrf(
     minAa as int,
     stopped as bool) {
     def out as list of Orf;
-    def nucleotides as string init $strandSequence[$from..$upto];
-    if (len($nucleotides) < 3) {
+    def codons as int init ($upto - $from) // 3;
+    if ($codons < 1) {
         return $out;
     }
+    # the protein is one residue per codon, less the stop
+    def residues as int init $codons;
+    if ($stopped) {
+        $residues = $codons - 1;
+    }
+    if ($residues < $minAa) {
+        return $out;
+    }
+    def nucleotides as string init convert.stringFromBytes(
+        binary.slice($strandBytes, $from, $upto),
+        "utf-8");
     def protein as string init translateClean($nucleotides, $table);
     if ($stopped and len($protein) > 0) {
         $protein = $protein[0..len($protein) - 1];
-    }
-    if (len($protein) < $minAa) {
-        return $out;
     }
     def strand as int init 1;
     def start as int init $from;
@@ -473,7 +548,7 @@ func recordOrf(
         # position n-1-p on the original, so the half-open span [from, to)
         # becomes [n-to, n-from)
         $strand = -1;
-        def n as int init len($strandSequence);
+        def n as int init len($strandBytes);
         $start = $n - $upto;
         $finish = $n - $from;
     }
@@ -520,6 +595,11 @@ export def struct Region {
  * are recomputed over each merged region. A sequence shorter than one window
  * gives an empty list.
  *
+ * The tests are exact: each threshold is taken at its shortest decimal form
+ * (`0.65` is 65/100) and compared against integer counts, so a window whose
+ * ratio equals the threshold qualifies. The reported `gc` and `obsExp` are
+ * floats.
+ *
  * @param s {string} a DNA sequence
  * @param window {int} the scanning window in bases; must be positive
  * @param minGc {float} the minimum GC percentage, 0 to 100
@@ -547,6 +627,15 @@ export func cpgIslands(s as string, window as int, minGc as float, minObsExp as 
         return $out;
     }
     def buf as bytes init convert.bytesFromString($clean, "utf-8");
+
+    # Thresholds as exact fractions: the float division this replaced rounded
+    # twice and rejected a window at exactly 0.65. Integer cross-multiplication
+    # is used when every product fits an int, decimal arithmetic otherwise.
+    def gcExact as decimal.Decimal init decimal.from($minGc);
+    def oeExact as decimal.Decimal init decimal.from($minObsExp);
+    def gcParts as list of int init exactFraction($gcExact);
+    def oeParts as list of int init exactFraction($oeExact);
+    def integral as bool init productsFit($gcParts, $oeParts, $window);
 
     # prefix sums, so each window's counts are read in constant time rather than
     # recounted - the difference between a linear scan and a quadratic one
@@ -579,7 +668,20 @@ export func cpgIslands(s as string, window as int, minGc as float, minObsExp as 
     def spanEnd as int init -1;
     for (def start as int init 0; $start + $window <= $n; $start = $start + 1) {
         def finish as int init $start + $window;
-        if (windowQualifies($cAt, $gAt, $cgAt, $start, $finish, $minGc, $minObsExp)) {
+        def qualifies as bool init false;
+        if ($integral) {
+            $qualifies = windowQualifies($cAt, $gAt, $cgAt, $start, $finish, $gcParts, $oeParts);
+        } else {
+            $qualifies = windowQualifiesDecimal(
+                $cAt,
+                $gAt,
+                $cgAt,
+                $start,
+                $finish,
+                $gcExact,
+                $oeExact);
+        }
+        if ($qualifies) {
             if ($spanStart < 0) {
                 $spanStart = $start;
                 $spanEnd = $finish;
@@ -599,15 +701,62 @@ export func cpgIslands(s as string, window as int, minGc as float, minObsExp as 
 }
 
 /**
- * Does the half-open window meet both thresholds?
+ * A non-negative decimal as an int fraction `[numerator, denominator]`.
+ *
+ * @param d {decimal.Decimal} the value
+ * @return {list of int} `[num, 10^scale]`, or empty when the scale exceeds 9 or
+ *         the value is 10^9 or more, so neither part passes 10^18
+ * @internal
+ */
+func exactFraction(d as decimal.Decimal) {
+    def out as list of int;
+    def scale as int init decimal.scale($d);
+    if ($scale > 9 or decimal.compare($d, 1000000000) >= 0) {
+        return $out;
+    }
+    def den as decimal.Decimal init decimal.pow(10, $scale);
+    $out[] = decimal.toInt(decimal.mul($d, $den));
+    $out[] = decimal.toInt($den);
+    return $out;
+}
+
+/**
+ * Do the integer window tests stay inside an int for these thresholds?
+ *
+ * Every product in `windowQualifies` is at most a fraction part times
+ * `window * window` (`100 * den` for the GC test).
+ *
+ * @param gc {list of int} the GC threshold as `[num, den]`, or empty
+ * @param oe {list of int} the obs/exp threshold as `[num, den]`, or empty
+ * @param window {int} the window width
+ * @return {bool} true when the integer path is safe
+ * @internal
+ */
+func productsFit(gc as list of int, oe as list of int, window as int) {
+    if (len($gc) != 2 or len($oe) != 2 or $window > 3037000499) {
+        return false;
+    }
+    def widest as int init 100 * $gc[1];
+    for (def part in [$gc[0], $oe[0], $oe[1]]) {
+        if ($part > $widest) {
+            $widest = $part;
+        }
+    }
+    return $widest <= 9223372036854775807 // ($window * $window);
+}
+
+/**
+ * Does the half-open window meet both thresholds? Integer arithmetic.
+ *
+ * The caller has checked that every product below fits an int.
  *
  * @param cAt {list of int} prefix sums of C
  * @param gAt {list of int} prefix sums of G
  * @param cgAt {list of int} prefix sums of the CG dinucleotide
  * @param from {int} window start
  * @param upto {int} window end, half-open
- * @param minGc {float} minimum GC percentage
- * @param minObsExp {float} minimum observed/expected ratio
+ * @param gc {list of int} minimum GC percentage as `[num, den]`
+ * @param oe {list of int} minimum observed/expected ratio as `[num, den]`
  * @return {bool} true when the window qualifies
  * @internal
  */
@@ -617,12 +766,13 @@ func windowQualifies(
     cgAt as list of int,
     from as int,
     upto as int,
-    minGc as float,
-    minObsExp as float) {
+    gc as list of int,
+    oe as list of int) {
     def width as int init $upto - $from;
     def c as int init $cAt[$upto] -$cAt[$from];
     def g as int init $gAt[$upto] -$gAt[$from];
-    if (100.0 * ($c + $g) / $width < $minGc) {
+    # 100 (c + g) / width >= num / den
+    if (100 * ($c + $g) * $gc[1] < $gc[0] * $width) {
         return false;
     }
     if ($c == 0 or $g == 0) {
@@ -630,8 +780,45 @@ func windowQualifies(
     }
     # a CG straddling the window's left edge belongs to the previous window
     def observed as int init $cgAt[$upto] -$cgAt[$from + 1];
-    def expected as float init 1.0 * $c * $g / $width;
-    return $observed / $expected >= $minObsExp;
+    # observed / (c g / width) >= num / den
+    return $observed * $width * $oe[1] >= $oe[0] * $c * $g;
+}
+
+/**
+ * Does the half-open window meet both thresholds? Decimal arithmetic, for
+ * thresholds or windows whose integer products could overflow.
+ *
+ * @param cAt {list of int} prefix sums of C
+ * @param gAt {list of int} prefix sums of G
+ * @param cgAt {list of int} prefix sums of the CG dinucleotide
+ * @param from {int} window start
+ * @param upto {int} window end, half-open
+ * @param minGc {decimal.Decimal} minimum GC percentage
+ * @param minObsExp {decimal.Decimal} minimum observed/expected ratio
+ * @return {bool} true when the window qualifies
+ * @internal
+ */
+func windowQualifiesDecimal(
+    cAt as list of int,
+    gAt as list of int,
+    cgAt as list of int,
+    from as int,
+    upto as int,
+    minGc as decimal.Decimal,
+    minObsExp as decimal.Decimal) {
+    def width as int init $upto - $from;
+    def c as int init $cAt[$upto] -$cAt[$from];
+    def g as int init $gAt[$upto] -$gAt[$from];
+    if (decimal.compare(decimal.mul(100, $c + $g), decimal.mul($minGc, $width)) < 0) {
+        return false;
+    }
+    if ($c == 0 or $g == 0) {
+        return false;
+    }
+    def observed as int init $cgAt[$upto] -$cgAt[$from + 1];
+    return decimal.compare(
+        decimal.mul($observed, $width),
+        decimal.mul(decimal.mul($c, $g), $minObsExp)) >= 0;
 }
 
 /**
@@ -657,7 +844,8 @@ func describeRegion(
     def observed as int init $cgAt[$upto] -$cgAt[$from + 1];
     def ratio as float init 0.0;
     if ($c > 0 and $g > 0) {
-        $ratio = $observed / (1.0 * $c * $g / $width);
+        # one division of exact integers, so the ratio is rounded once
+        $ratio = 1.0 * $observed * $width / ($c * $g);
     }
     return Region{
         start: $from,
@@ -696,7 +884,8 @@ export def struct Site {
  * Every recognition sequence in the table is palindromic, so one forward scan
  * finds every site. A non-palindromic site would also be searched on the reverse
  * strand and reported with `strand: -1`. The sequence is treated as linear: a
- * site spanning the origin of a circular sequence is not found.
+ * site spanning the origin of a circular sequence is not found. A name given
+ * more than once (in any case) is searched once.
  *
  * @param s {string} a DNA sequence
  * @param names {list of string} enzyme names, any case
@@ -708,26 +897,54 @@ export def struct Site {
 export func restrictionSites(s as string, names as list of string) {
     def clean as string init requireDna($s);
     def found as list of Site;
+    def asked as map of string to bool;
+    def hay as bytes init convert.bytesFromString($clean, "utf-8");
     for (def name in $names) {
         def e as Enzyme init enzyme($name);
-        if (len($e.site) > len($clean)) {
+        if (maps.has($asked, $e.name)) {
             continue;
         }
-        for (def m in matchIupac($clean, $e.site, 1)) {
-            $found[] = siteFrom($e, $m);
-        }
-        def flipped as string init reverseComplement($e.site);
-        if ($flipped != $e.site) {
-            for (def m in matchIupac($clean, $flipped, -1)) {
-                $found[] = siteFrom($e, $m);
-            }
+        $asked[$e.name] = true;
+        for (def site in enzymeSites($hay, $e)) {
+            $found[] = $site;
         }
     }
     return sortSites($found);
 }
 
 /**
+ * Every site of one enzyme, both strands, unordered.
+ *
+ * @param hay {bytes} a validated DNA sequence
+ * @param e {Enzyme} the enzyme
+ * @return {list of Site} forward hits, then reverse-strand hits of a
+ *         non-palindromic site
+ * @internal
+ */
+func enzymeSites(hay as bytes, e as Enzyme) {
+    def out as list of Site;
+    if (len($e.site) > len($hay)) {
+        return $out;
+    }
+    for (def m in matchIupac($hay, $e.site, 1)) {
+        $out[] = siteFrom($e, $m);
+    }
+    def flipped as string init reverseComplement($e.site);
+    if ($flipped != $e.site) {
+        for (def m in matchIupac($hay, $flipped, -1)) {
+            $out[] = siteFrom($e, $m);
+        }
+    }
+    return $out;
+}
+
+/**
  * Build a `Site` from an enzyme and the match that located it.
+ *
+ * On the forward strand the top strand is cut `cutTop` into the site. A
+ * reverse-strand hit is the site read on the bottom strand, so its cut on the
+ * forward strand is the enzyme's bottom-strand cut mirrored: `end - cutBottom`.
+ * For a palindromic site, where `cutBottom == len(site) - cutTop`, both agree.
  *
  * @param e {Enzyme} the enzyme
  * @param m {Match} where its recognition sequence was found
@@ -735,31 +952,71 @@ export func restrictionSites(s as string, names as list of string) {
  * @internal
  */
 func siteFrom(e as Enzyme, m as Match) {
+    def cut as int init $m.start + $e.cutTop;
+    if ($m.strand < 0) {
+        $cut = $m.end - $e.cutBottom;
+    }
     return Site{
         enzyme: $e.name,
         start: $m.start,
         end: $m.end,
-        cut: $m.start + $e.cutTop,
+        cut: $cut,
         site: $m.text,
         strand: $m.strand
     };
 }
 
 /**
- * Order sites by cut position, then by enzyme name, via `mergeSortSites`.
+ * Order sites by cut position, then by enzyme name; stable.
  *
- * An earlier insertion sort rebuilt the list on every insertion; an 8 kb digest
- * with the full enzyme table spent about four seconds in it.
+ * Each site becomes one int key, `(cut * names + nameRank) * count + index`, and
+ * the keys go through the native `lists.sort`: a 200 kb digest with the whole
+ * table (about 10 000 sites) went from about a second in `mergeSortSites` to
+ * under a tenth. The index in the low digits keeps equal sites in input order
+ * and recovers the site. When a key could overflow an int it falls back to
+ * `mergeSortSites`.
  *
  * @param sites {list of Site} the sites to order
  * @return {list of Site} the same sites, ordered
  * @internal
  */
 func sortSites(sites as list of Site) {
-    if (len($sites) < 2) {
+    def count as int init len($sites);
+    if ($count < 2) {
         return $sites;
     }
-    return mergeSortSites($sites);
+    def seen as map of string to bool;
+    def names as list of string;
+    def maxCut as int init 0;
+    for (def site in $sites) {
+        if (not maps.has($seen, $site.enzyme)) {
+            $seen[$site.enzyme] = true;
+            $names[] = $site.enzyme;
+        }
+        if ($site.cut > $maxCut) {
+            $maxCut = $site.cut;
+        }
+    }
+    def width as int init len($names);
+    # every key is below (maxCut + 1) * width * count
+    if ($maxCut + 1 > 9223372036854775807 // ($width * $count)) {
+        return mergeSortSites($sites);
+    }
+    def rank as map of string to int;
+    def r as int init 0;
+    for (def name in lists.sort($names)) {
+        $rank[$name] = $r;
+        $r = $r + 1;
+    }
+    def keys as list of int;
+    for (def i as int init 0; $i < $count; $i = $i + 1) {
+        $keys[] = ($sites[$i].cut * $width + $rank[$sites[$i].enzyme]) * $count + $i;
+    }
+    def out as list of Site;
+    for (def key in lists.sort($keys)) {
+        $out[] = $sites[$key % $count];
+    }
+    return $out;
 }
 
 /**
