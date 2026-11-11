@@ -10,7 +10,7 @@
 # speed. This derives them back from the human-readable alphabet strings and
 # fails if the two ever drift apart, so the magic numbers cannot go stale.
 func codesOf(alphabet as string) {
-    def buf as bytes init convert.bytesFromString($alphabet, "utf-8");
+    def buf as bytes init convert.bytesFromString("utf-8", $alphabet);
     def out as map of int to bool;
     for (def i as int init 0; $i < len($buf); $i = $i + 1) {
         $out[$buf[$i]] = true;
@@ -266,7 +266,7 @@ func patternAgrees(pattern as string, admits as list of bool) {
     for (def code as int init 1; $code < 128; $code = $code + 1) {
         def one as bytes;
         $one[] = $code;
-        if (regex.matches($pattern, convert.stringFromBytes($one, "utf-8")) != $admits[$code]) {
+        if (regex.matches($pattern, convert.stringFromBytes("utf-8", $one)) != $admits[$code]) {
             return false;
         }
     }

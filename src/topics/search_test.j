@@ -547,7 +547,7 @@ func testExpandedScanAgreesWithInterpretedScan() {
     # cross-implementation: the expansion path and the interpreted fallback must
     # report the same matches for every degenerate site in the table
     math.randSeed(11);
-    def dna as bytes init convert.bytesFromString(randomDna(3000), "utf-8");
+    def dna as bytes init convert.bytesFromString("utf-8", randomDna(3000));
     for (def e in enzymes()) {
         if (isExactSite($e.site)) {
             continue;
@@ -616,7 +616,7 @@ func testReverseStrandCutUsesCutBottom() {
         overhangLength: 3
     };
     def sites as list of Site init enzymeSites(
-        convert.bytesFromString("AAAATGCGTCAAAA", "utf-8"),
+        convert.bytesFromString("utf-8", "AAAATGCGTCAAAA"),
         $e);
     testing.assertEqual(len($sites), 1);
     testing.assertEqual($sites[0].strand, -1);
@@ -632,7 +632,7 @@ func testKeyedSortAgreesWithMergeSort() {
     # cross-implementation: the native keyed sort and the merge sort it replaced
     # must give the same order, ties included
     math.randSeed(5);
-    def hay as bytes init convert.bytesFromString(randomDna(4000), "utf-8");
+    def hay as bytes init convert.bytesFromString("utf-8", randomDna(4000));
     def all as list of Site;
     for (def e in enzymes()) {
         for (def site in enzymeSites($hay, $e)) {

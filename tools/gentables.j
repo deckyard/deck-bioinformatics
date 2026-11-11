@@ -468,7 +468,7 @@ func denseList(values as map of int to string, fill as string) {
 }
 
 func codeOf(one as string) {
-    return convert.bytesFromString($one, 'utf-8')[0];
+    return convert.bytesFromString('utf-8', $one)[0];
 }
 
 def emitted as list of string;

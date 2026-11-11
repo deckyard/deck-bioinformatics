@@ -180,7 +180,7 @@ func describeCode(code as int) {
     }
     def one as bytes;
     $one[] = $code;
-    return "'" + convert.stringFromBytes($one, "utf-8") + "'";
+    return "'" + convert.stringFromBytes("utf-8", $one) + "'";
 }
 
 # ------------------------------------------------------------ filters (lenient)
@@ -229,7 +229,7 @@ export func filterProtein(s as string) {
  * @internal
  */
 func filterBy(s as string, admits as list of bool) {
-    def buf as bytes init convert.bytesFromString($s, "utf-8");
+    def buf as bytes init convert.bytesFromString("utf-8", $s);
     def n as int init len($buf);
     def out as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -241,7 +241,7 @@ func filterBy(s as string, admits as list of bool) {
             $out[] = $code;
         }
     }
-    return convert.stringFromBytes($out, "utf-8");
+    return convert.stringFromBytes("utf-8", $out);
 }
 
 # ------------------------------------------------------------------ predicates
@@ -290,7 +290,7 @@ export func isProtein(s as string) {
  * @internal
  */
 func isAll(s as string, admits as list of bool) {
-    def buf as bytes init convert.bytesFromString($s, "utf-8");
+    def buf as bytes init convert.bytesFromString("utf-8", $s);
     def n as int init len($buf);
     if ($n == 0) {
         return false;
@@ -335,7 +335,7 @@ func normalizeBy(s as string, admits as list of bool, pattern as string, what as
     if (len($s) > 0 and regex.matches($pattern, $s)) {
         return $s;
     }
-    def buf as bytes init convert.bytesFromString($s, "utf-8");
+    def buf as bytes init convert.bytesFromString("utf-8", $s);
     def n as int init len($buf);
     def out as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -372,7 +372,7 @@ func normalizeBy(s as string, admits as list of bool, pattern as string, what as
     if (len($out) == 0) {
         raiseError("empty " + $what + " sequence");
     }
-    return convert.stringFromBytes($out, "utf-8");
+    return convert.stringFromBytes("utf-8", $out);
 }
 
 /**

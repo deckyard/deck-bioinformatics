@@ -195,8 +195,8 @@ export func alignLocal(a as string, b as string, opts as AlignOptions) {
 func align(a as string, b as string, opts as AlignOptions, local as bool) {
     def left as string init requireSequence($a);
     def right as string init requireSequence($b);
-    def ax as bytes init convert.bytesFromString($left, "utf-8");
-    def bx as bytes init convert.bytesFromString($right, "utf-8");
+    def ax as bytes init convert.bytesFromString("utf-8", $left);
+    def bx as bytes init convert.bytesFromString("utf-8", $right);
     def n as int init len($ax);
     def m as int init len($bx);
     requireAlignable($n, $m, $opts.maxCells);
@@ -314,8 +314,8 @@ func pairScores(a as string, b as string, opts as AlignOptions) {
     def out as map of int to int;
     for (def x in distinctChars($a)) {
         for (def y in distinctChars($b)) {
-            def key as int init convert.bytesFromString($x, "utf-8")[0] * 256 +
-                convert.bytesFromString($y, "utf-8")[0];
+            def key as int init convert.bytesFromString("utf-8", $x)[0] * 256 +
+                convert.bytesFromString("utf-8", $y)[0];
             if (not maps.has($out, $key)) {
                 $out[$key] = pairScore($x, $y, $opts, $useMatrix);
             }
@@ -417,8 +417,8 @@ func traceback(
             $sub = pairScore($x, $y, $opts, $useMatrix);
         }
         if ($i > 0 and $j > 0 and $dp[$i * $width + $j] == $dp[($i - 1) * $width + $j - 1] + $sub) {
-            $topRow[] = convert.bytesFromString($x, "utf-8")[0];
-            $bottomRow[] = convert.bytesFromString($y, "utf-8")[0];
+            $topRow[] = convert.bytesFromString("utf-8", $x)[0];
+            $bottomRow[] = convert.bytesFromString("utf-8", $y)[0];
             if ($x == $y) {
                 $markupRow[] = 124;
                 $identities = $identities + 1;
@@ -432,14 +432,14 @@ func traceback(
             $i = $i - 1;
             $j = $j - 1;
         } elseif ($i > 0 and $dp[$i * $width + $j] == $dp[($i - 1) * $width + $j] + $gap) {
-            $topRow[] = convert.bytesFromString($a[$i - 1..$i], "utf-8")[0];
+            $topRow[] = convert.bytesFromString("utf-8", $a[$i - 1..$i])[0];
             $bottomRow[] = 45;
             $markupRow[] = 32;
             $gaps = $gaps + 1;
             $i = $i - 1;
         } else {
             $topRow[] = 45;
-            $bottomRow[] = convert.bytesFromString($b[$j - 1..$j], "utf-8")[0];
+            $bottomRow[] = convert.bytesFromString("utf-8", $b[$j - 1..$j])[0];
             $markupRow[] = 32;
             $gaps = $gaps + 1;
             $j = $j - 1;
@@ -476,7 +476,7 @@ func reverseBytes(buf as bytes) {
     for (def i as int init len($buf) - 1; $i >= 0; $i = $i - 1) {
         $out[] = $buf[$i];
     }
-    return convert.stringFromBytes($out, "utf-8");
+    return convert.stringFromBytes("utf-8", $out);
 }
 
 # ---------------------------------------------------------------- reading it
@@ -570,9 +570,9 @@ export func formatAlignment(al as Alignment, width as int) {
     # Rows are cut from byte buffers and the blocks joined once at the end: a
     # rune-indexed string slice costs O(offset) and `+` on the growing result
     # copied it per block, which made 80 000 columns take half a second.
-    def rowA as bytes init convert.bytesFromString($al.a, "utf-8");
-    def rowB as bytes init convert.bytesFromString($al.b, "utf-8");
-    def rowM as bytes init convert.bytesFromString($al.markup, "utf-8");
+    def rowA as bytes init convert.bytesFromString("utf-8", $al.a);
+    def rowB as bytes init convert.bytesFromString("utf-8", $al.b);
+    def rowM as bytes init convert.bytesFromString("utf-8", $al.markup);
     if (len($rowA) != $al.length or len($rowB) != $al.length or len($rowM) != $al.length) {
         raiseError("the alignment rows hold non-ASCII characters; residues, gaps and markup are ASCII");
     }
@@ -587,12 +587,12 @@ export func formatAlignment(al as Alignment, width as int) {
         }
         def chunkA as bytes init binary.slice($rowA, $at, $stop);
         def chunkB as bytes init binary.slice($rowB, $at, $stop);
-        $lines[] = io.sprintf("%d|pad=6 %s\n", $posA, convert.stringFromBytes($chunkA, "utf-8"));
+        $lines[] = io.sprintf("%d|pad=6 %s\n", $posA, convert.stringFromBytes("utf-8", $chunkA));
         $lines[] = io.sprintf(
             "%s|pad=6 %s\n",
             "",
-            convert.stringFromBytes(binary.slice($rowM, $at, $stop), "utf-8"));
-        $lines[] = io.sprintf("%d|pad=6 %s\n\n", $posB, convert.stringFromBytes($chunkB, "utf-8"));
+            convert.stringFromBytes("utf-8", binary.slice($rowM, $at, $stop)));
+        $lines[] = io.sprintf("%d|pad=6 %s\n\n", $posB, convert.stringFromBytes("utf-8", $chunkB));
         $posA = $posA + countResidues2($chunkA);
         $posB = $posB + countResidues2($chunkB);
         $at = $stop;
@@ -640,8 +640,8 @@ export func hammingDistance(a as string, b as string) {
         raiseError("Hamming distance needs equal lengths, got " + convert.toString(len($left)) +
             " and " + convert.toString(len($right)) + " (use editDistance when the lengths differ)");
     }
-    def ax as bytes init convert.bytesFromString($left, "utf-8");
-    def bx as bytes init convert.bytesFromString($right, "utf-8");
+    def ax as bytes init convert.bytesFromString("utf-8", $left);
+    def bx as bytes init convert.bytesFromString("utf-8", $right);
     def differences as int init 0;
     def n as int init len($ax);
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -680,8 +680,8 @@ export def const MAX_EDIT_DISTANCE_CELLS as int init 2500000;
 export func editDistance(a as string, b as string) {
     def left as string init requireSequence($a);
     def right as string init requireSequence($b);
-    def ax as bytes init convert.bytesFromString($left, "utf-8");
-    def bx as bytes init convert.bytesFromString($right, "utf-8");
+    def ax as bytes init convert.bytesFromString("utf-8", $left);
+    def bx as bytes init convert.bytesFromString("utf-8", $right);
     def n as int init len($ax);
     def m as int init len($bx);
     if ($n > MAX_EDIT_DISTANCE_CELLS // $m) {
