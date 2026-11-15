@@ -152,7 +152,7 @@ export def struct Alignment {
  * @param opts {AlignOptions} scoring, from `dnaOptions` or `proteinOptions`
  * @return {Alignment} the alignment
  * @throws {Error} kind "bioinformatics" when either sequence is empty or holds a
- *         non-residue, or the matrix would exceed `opts.maxCells`
+ *         non-residue; kind "limit" when the matrix would exceed `opts.maxCells`
  * @see Needleman SB, Wunsch CD (1970) J Mol Biol 48:443-453
  * @example bioseq.alignGlobal($one, $other, bioseq.dnaOptions())
  */
@@ -175,7 +175,7 @@ export func alignGlobal(a as string, b as string, opts as AlignOptions) {
  * @param opts {AlignOptions} scoring, from `dnaOptions` or `proteinOptions`
  * @return {Alignment} the best local alignment
  * @throws {Error} kind "bioinformatics" when either sequence is empty or holds a
- *         non-residue, or the matrix would exceed `opts.maxCells`
+ *         non-residue; kind "limit" when the matrix would exceed `opts.maxCells`
  * @see Smith TF, Waterman MS (1981) J Mol Biol 147:195-197
  */
 export func alignLocal(a as string, b as string, opts as AlignOptions) {
@@ -279,7 +279,7 @@ func align(a as string, b as string, opts as AlignOptions, local as bool) {
  * @param n {int} length of the first sequence
  * @param m {int} length of the second
  * @param maxCells {int} the ceiling, or 0 for none
- * @throws {Error} kind "bioinformatics" when the matrix would be too large
+ * @throws {Error} kind "limit" when the matrix would be too large
  * @internal
  */
 func requireAlignable(n as int, m as int, maxCells as int) {
@@ -288,7 +288,7 @@ func requireAlignable(n as int, m as int, maxCells as int) {
     }
     def cells as int init ($n + 1) * ($m + 1);
     if ($cells > $maxCells) {
-        raiseError("aligning " + convert.toString($n) + " against " + convert.toString($m) +
+        raiseLimit("aligning " + convert.toString($n) + " against " + convert.toString($m) +
             " residues needs " + convert.toString($cells) + " matrix cells, over the limit of " +
             convert.toString($maxCells) +
             " (roughly a kilobyte each, so this would exhaust memory)" +
@@ -674,7 +674,7 @@ export def const MAX_EDIT_DISTANCE_CELLS as int init 2500000;
  * @param b {string} the second sequence
  * @return {int} the edit distance
  * @throws {Error} kind "bioinformatics" when either sequence is empty or holds a
- *         non-residue, or `len(a) * len(b)` exceeds `MAX_EDIT_DISTANCE_CELLS`
+ *         non-residue; kind "limit" when `len(a) * len(b)` exceeds `MAX_EDIT_DISTANCE_CELLS`
  * @example bioseq.editDistance("ATGC", "AGC") == 1
  */
 export func editDistance(a as string, b as string) {
@@ -685,7 +685,7 @@ export func editDistance(a as string, b as string) {
     def n as int init len($ax);
     def m as int init len($bx);
     if ($n > MAX_EDIT_DISTANCE_CELLS // $m) {
-        raiseError("edit distance of " + convert.toString($n) + " against " + convert.toString($m) +
+        raiseLimit("edit distance of " + convert.toString($n) + " against " + convert.toString($m) +
             " residues needs " + convert.toString($n) + " x " + convert.toString($m) +
             " cells, over MAX_EDIT_DISTANCE_CELLS (" + convert.toString(MAX_EDIT_DISTANCE_CELLS) +
             "); compare a smaller region");

@@ -1,7 +1,9 @@
 # Cheatsheet
 
 Every export, reached as `bioseq.NAME`. All errors are
-`Error{kind: "bioinformatics"}`.
+`Error{kind: "bioinformatics"}`, except a reached cap (`MAX_RECORDS`,
+`AlignOptions.maxCells`, `MAX_EDIT_DISTANCE_CELLS`), which is
+`Error{kind: "limit"}`.
 
 ```jennifer
 import "@deckyard/bioinformatics/" as bioseq;

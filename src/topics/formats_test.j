@@ -476,9 +476,9 @@ func testRecordCapRaisesPastTheLimit() {
     # the cap as a parameter and these run them against a cap of two.
     testing.assertEqual(len(parseFastaUpTo(">a\n>b\n", 2)), 2);
     testing.assertEqual(len(parseFastqUpTo("@a\nA\n+\nI\n@b\nC\n+\nI\n", 2)), 2);
-    testing.assertThrows("fastaPastCap", "bioinformatics");
-    testing.assertThrows("fastqPastCap", "bioinformatics");
-    testing.assertThrows("roomPastMaxRecords", "bioinformatics");
+    testing.assertThrows("fastaPastCap", "limit");
+    testing.assertThrows("fastqPastCap", "limit");
+    testing.assertThrows("roomPastMaxRecords", "limit");
     requireRoom(MAX_RECORDS, MAX_RECORDS, "records");
 }
 

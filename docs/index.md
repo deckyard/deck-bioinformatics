@@ -18,7 +18,8 @@ bioseq.molecularWeight($gene, bioseq.DNA);  # 5546.66
 ```
 
 Sequences are plain strings, offsets are 0-based half-open, and every error is
-`Error{kind: "bioinformatics"}`. Read [Sequences and alphabets](sequences.md)
+`Error{kind: "bioinformatics"}`, except a reached size cap, which is
+`Error{kind: "limit"}`. Read [Sequences and alphabets](sequences.md)
 first: it states the conventions every other page relies on. Every snippet in
 this book imports the deck as `bioseq`; nothing depends on the alias.
 

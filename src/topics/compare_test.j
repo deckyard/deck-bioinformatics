@@ -374,7 +374,7 @@ func testDistancesAgreeWithAlignment() {
 func testAlignmentRefusesAnOversizedMatrix() {
     # The matrix costs about a kilobyte per cell, so two large sequences would
     # exhaust memory rather than merely take a while. The guard raises instead.
-    testing.assertThrows("alignTooBig", "bioinformatics");
+    testing.assertThrows("alignTooBig", "limit");
 }
 
 func alignTooBig() {
@@ -490,7 +490,7 @@ func formatNonAscii() {
 }
 
 func testEditDistanceIsCapped() {
-    testing.assertThrows("editDistanceTooLarge", "bioinformatics");
+    testing.assertThrows("editDistanceTooLarge", "limit");
 }
 
 func editDistanceTooLarge() {

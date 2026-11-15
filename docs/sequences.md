@@ -112,7 +112,10 @@ A sequence with neither `T` nor `U` is treated as DNA.
 
 ## One error shape
 
-Every error is `Error{kind: "bioinformatics"}` with a readable message.
+Every error is `Error{kind: "bioinformatics"}` with a readable message, except
+a reached cap (a parse past `MAX_RECORDS`, an alignment past
+`AlignOptions.maxCells`, an edit distance past `MAX_EDIT_DISTANCE_CELLS`),
+which is the generic `Error{kind: "limit"}` every library uses for that.
 Arguments are validated before any work, so a call either returns a complete
 answer or raises.
 

@@ -168,6 +168,18 @@ func raiseError(message as string) {
 }
 
 /**
+ * Raise a reached cap: the generic kind "limit", which every library uses
+ * for a size or count past its bound.
+ *
+ * @param message {string} human-readable description of the cap
+ * @throws {Error} always, kind "limit"
+ * @internal
+ */
+func raiseLimit(message as string) {
+    throw Error{kind: "limit", message: $message, file: "", line: 0, col: 0};
+}
+
+/**
  * Render one byte as a printable character for an error message.
  *
  * @param code {int} an ASCII byte value

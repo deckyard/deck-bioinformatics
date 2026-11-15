@@ -36,7 +36,8 @@ $records[0].sequence;      # wrapped lines joined
   raise, as does text with no record. Residues are not validated against any
   alphabet.
 - A header with no sequence lines gives an empty `sequence`.
-- Parsing stops with an error past `MAX_RECORDS` (1 000 000) records. A bare `>`
+- Parsing stops with an `Error{kind: "limit"}` past `MAX_RECORDS` (1 000 000)
+  records. A bare `>`
   line is three bytes of input and a whole `Record` in memory, so a hostile file
   of them expands about a hundredfold; the cap bounds that.
 

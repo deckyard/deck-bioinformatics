@@ -171,7 +171,8 @@ func splitHeader(header as string, marker as string) {
  * @param text {string} the contents of a FASTA file
  * @return {list of Record} the records, in file order
  * @throws {Error} kind "bioinformatics" when there is no record, when data appears
- *         before the first header, when a header carries no id, or past `MAX_RECORDS`
+ *         before the first header or when a header carries no id; kind "limit"
+ *         past `MAX_RECORDS`
  * @example bioseq.parseFasta(">seq1 first\nATGC\n")[0].id == "seq1"
  */
 export func parseFasta(text as string) {
@@ -416,7 +417,8 @@ export func toPlain(text as string) {
  * @return {list of Read} the reads, in file order
  * @throws {Error} kind "bioinformatics" when there is no record, a record does not
  *         start with `@`, lacks its `+` separator, has a quality string of the
- *         wrong length or a quality byte outside 33..126, or past `MAX_RECORDS`
+ *         wrong length or a quality byte outside 33..126; kind "limit" past
+ *         `MAX_RECORDS`
  * @example bioseq.parseFastq("@r1\nATGC\n+\nIIII\n")[0].quality == "IIII"
  */
 export func parseFastq(text as string) {
@@ -497,12 +499,12 @@ func parseFastqUpTo(text as string, limit as int) {
  * @param count {int} how many there would be once the next one is added
  * @param limit {int} the cap, `MAX_RECORDS` outside tests
  * @param what {string} what is being counted, for the message
- * @throws {Error} kind "bioinformatics" when the count exceeds `limit`
+ * @throws {Error} kind "limit" when the count exceeds `limit`
  * @internal
  */
 func requireRoom(count as int, limit as int, what as string) {
     if ($count > $limit) {
-        raiseError("more than " + convert.toString($limit) + " " + $what +
+        raiseLimit("more than " + convert.toString($limit) + " " + $what +
             " in one parse (MAX_RECORDS) - refusing to continue, since a file of bare" +
             " header lines expands about a hundredfold in memory");
     }

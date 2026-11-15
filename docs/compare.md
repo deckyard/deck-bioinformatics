@@ -117,7 +117,7 @@ each costing one. A sequence shifted by one position (12 bases in
 Edit distance keeps two rows of `len(b) + 1` entries: O(m) memory in the second
 sequence's length, O(n*m) time at about 2 microseconds a cell. `maxCells` does
 not apply; instead `len(a) * len(b)` above `MAX_EDIT_DISTANCE_CELLS` (2 500 000,
-about 5 seconds; 1500 x 1500 fits) raises before any work.
+about 5 seconds; 1500 x 1500 fits) raises kind `"limit"` before any work.
 
 ## Performance and the memory limit
 
@@ -142,7 +142,7 @@ kilobyte per cell.
 1000 x 1000 is about a gigabyte; 2000 x 2000 is an out-of-memory kill. So
 `AlignOptions.maxCells` defaults to `DEFAULT_MAX_ALIGNMENT_CELLS` (1 000 000).
 The matrix has `(len(a) + 1) * (len(b) + 1)` cells, and an alignment over the
-limit raises before allocating. Without the limit, aligning two untrusted
+limit raises kind `"limit"` before allocating. Without the limit, aligning two untrusted
 sequences can take the process down.
 
 ```jennifer
