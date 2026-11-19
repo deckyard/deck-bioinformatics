@@ -24,4 +24,4 @@
 # Reference
 
 - [Cheatsheet](cheatsheet.md)
-- [Design notes](design.md)
+- [Design](design.md)
