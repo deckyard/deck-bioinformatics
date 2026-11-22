@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - composition: what a sequence is made of, and what that implies.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -56,7 +56,7 @@ func countResidues(clean as string) {
     for (def i as int init 0; $i < 128; $i = $i + 1) {
         $tally[] = 0;
     }
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     for (def i as int init 0; $i < $n; $i = $i + 1) {
         $tally[$buf[$i]] = $tally[$buf[$i]] + 1;
@@ -66,7 +66,7 @@ func countResidues(clean as string) {
         if ($tally[$code] > 0) {
             def one as bytes;
             $one[] = $code;
-            $out[convert.stringFromBytes("utf-8", $one)] = $tally[$code];
+            $out[encoding.decode("utf-8", $one)] = $tally[$code];
         }
     }
     return $out;
@@ -129,7 +129,7 @@ func toPercentages(counts as map of string to int) {
  */
 export func gcContent(s as string) {
     def clean as string init requireNucleotide($s);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     def hits as int init 0;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -150,7 +150,7 @@ export func gcContent(s as string) {
  */
 export func atContent(s as string) {
     def clean as string init requireNucleotide($s);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     def hits as int init 0;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -190,7 +190,7 @@ export func gcWindows(s as string, size as int, step as int) {
     }
     # Prefix sums: before[i] is the G/C count of the first i bases, so each
     # window costs one subtraction instead of a recount of `size` bases.
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     def before as list of int;
     $before[] = 0;
@@ -234,7 +234,7 @@ export func molecularWeight(s as string, kind as int) {
     requireKind($kind);
     if ($kind == PROTEIN) {
         def protein as string init requireProtein($s);
-        def pbuf as bytes init convert.bytesFromString("utf-8", $protein);
+        def pbuf as bytes init encoding.encode("utf-8", $protein);
         def pn as int init len($pbuf);
         def ptotal as float init WATER_AVG_MASS;
         for (def i as int init 0; $i < $pn; $i = $i + 1) {
@@ -254,7 +254,7 @@ export func molecularWeight(s as string, kind as int) {
     } else {
         $clean = requireRna($s);
     }
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     def total as float init WATER_AVG_MASS - PHOSPHATE_MASS;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -291,7 +291,7 @@ export func molecularWeight(s as string, kind as int) {
  */
 export func meltingTemp(s as string) {
     def clean as string init requireUnambiguousDna($s);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def at as int init 0;
     def gc as int init 0;
     for (def i as int init 0; $i < len($buf); $i = $i + 1) {
@@ -420,7 +420,7 @@ func requireUnambiguousDna(s as string) {
     # Walk the input as given, not the cleaned copy, so the position is the byte
     # offset the caller sees (as `normalizeBy` reports). `requireDna` has
     # already rejected every foreign byte, so only skipping and case remain.
-    def buf as bytes init convert.bytesFromString("utf-8", $s);
+    def buf as bytes init encoding.encode("utf-8", $s);
     for (def i as int init 0; $i < len($buf); $i = $i + 1) {
         def code as int init $buf[$i];
         if ($code == 32 or $code == 9 or $code == 10 or $code == 13 or ($code >= 48 and $code <= 57)) {
@@ -479,7 +479,7 @@ func ionisableCounts(clean as string) {
     for (def i as int init 0; $i < 128; $i = $i + 1) {
         $counts[] = 0;
     }
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     for (def i as int init 0; $i < $n; $i = $i + 1) {
         def code as int init $buf[$i];
@@ -603,7 +603,7 @@ export func isoelectricPoint(p as string) {
  */
 export func gravy(p as string) {
     def clean as string init requireProtein($p);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     def total as float init 0.0;
     for (def i as int init 0; $i < $n; $i = $i + 1) {

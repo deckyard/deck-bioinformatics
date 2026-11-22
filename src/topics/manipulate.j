@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - manipulate: generating, shuffling, mutating and slicing sequences.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -127,13 +127,13 @@ export func randomProteinWith(n as int, weights as map of string to float) {
  */
 func randomFrom(n as int, alphabet as string) {
     requirePositiveLength($n);
-    def pool as bytes init convert.bytesFromString("utf-8", $alphabet);
+    def pool as bytes init encoding.encode("utf-8", $alphabet);
     def top as int init len($pool) - 1;
     def out as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
         $out[] = $pool[math.randInt(0, $top)];
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 /**
@@ -174,7 +174,7 @@ func randomWeighted(n as int, weights as map of string to float, alphabet as str
     }
 
     # cumulative distribution, parallel lists so the draw is two indexed reads
-    def pool as bytes init convert.bytesFromString("utf-8", $alphabet);
+    def pool as bytes init encoding.encode("utf-8", $alphabet);
     def scaled as list of float;
     def codes as list of int;
     def total as float init 0.0;
@@ -208,7 +208,7 @@ func randomWeighted(n as int, weights as map of string to float, alphabet as str
         }
         $out[] = $picked;
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 /**
@@ -240,14 +240,14 @@ func requirePositiveLength(n as int) {
  */
 export func shuffle(s as string) {
     def clean as string init requireSequence($s);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     for (def i as int init len($buf) - 1; $i > 0; $i = $i - 1) {
         def j as int init math.randInt(0, $i);
         def swap as int init $buf[$i];
         $buf[$i] = $buf[$j];
         $buf[$j] = $swap;
     }
-    return convert.stringFromBytes("utf-8", $buf);
+    return encoding.decode("utf-8", $buf);
 }
 
 # ---------------------------------------------------------------------- mutate
@@ -286,8 +286,8 @@ export func mutate(s as string, rate as float, kind as int) {
         $clean = requireProtein($s);
         $alphabet = STANDARD_RESIDUES;
     }
-    def pool as bytes init convert.bytesFromString("utf-8", $alphabet);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def pool as bytes init encoding.encode("utf-8", $alphabet);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def out as bytes;
     def n as int init len($buf);
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -297,7 +297,7 @@ export func mutate(s as string, rate as float, kind as int) {
             $out[] = $buf[$i];
         }
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 /**

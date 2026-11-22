@@ -1,7 +1,7 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - the measurements behind the deck's implementation conventions.
 #
@@ -14,19 +14,19 @@
 
 use io;
 use time;
-use convert;
+use encoding;
 
 import "../src/bioinformatics.j" as bioseq;
 
 def const N as int init 20000;
 
 func makeSeq(n as int) {
-    def alphabet as bytes init convert.bytesFromString("utf-8", "ACGT");
+    def alphabet as bytes init encoding.encode("utf-8", "ACGT");
     def b as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
         $b[] = $alphabet[($i * 7 + $i // 4) % 4];
     }
-    return convert.stringFromBytes("utf-8", $b);
+    return encoding.decode("utf-8", $b);
 }
 
 func elapsedMs(a as time.Time, b as time.Time) {
@@ -62,7 +62,7 @@ def t1 as time.Time init time.now();
 report("string slice $s[i..i+1]", elapsedMs($t0, $t1));
 
 def t2 as time.Time init time.now();
-def buf as bytes init convert.bytesFromString("utf-8", $seq);
+def buf as bytes init encoding.encode("utf-8", $seq);
 def gcB as int init 0;
 for (def i as int init 0; $i < N; $i = $i + 1) {
     def code as int init $buf[$i];
@@ -97,7 +97,7 @@ def outBytes as bytes;
 for (def i as int init 0; $i < N; $i = $i + 1) {
     $outBytes[] = 65;
 }
-def built as string init convert.stringFromBytes("utf-8", $outBytes);
+def built as string init encoding.decode("utf-8", $outBytes);
 def t7 as time.Time init time.now();
 report("bytes append then convert", elapsedMs($t6, $t7));
 io.printf("  (both %d long: %t)\n\n", N, len($outStr) == N and len($built) == N);

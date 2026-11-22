@@ -41,12 +41,13 @@ The examples in this repository import `../src/bioinformatics.j` the same way.
 
 | | |
 | - | - |
-| Jennifer | `>=0.26.0` |
+| Jennifer | `>=0.27.0` |
 | Deck dependencies | none |
 | Capabilities | none (no `net`, `exec` or filesystem) |
 | Builds | `jennifer` and `jennifer-tiny`, both listed in `[engines]` |
 
-The floor comes from `decimal` (0.26), which `cpgIslands` uses to compare its
+The floor comes from the UTF-8 codecs of `encoding.encode` / `decode` and
+`strings.replicate` (0.27). `cpgIslands` uses `decimal` (0.26) to compare its
 thresholds exactly. The deck also uses `math`, `strings`, `maps`, `lists`,
 `regex`, `convert`, `binary` and `io`.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - finding things inside a sequence.
 #
@@ -107,7 +107,8 @@ for (def o in bioseq.orfs($gene, 8)) {
 # CpG is scarce in vertebrate genomes - methylated cytosine deaminates to
 # thymine, so the dinucleotide has been eroded everywhere except where
 # methylation is kept off, which is where promoters sit.
-def promoterLike as string init "AAAATTTTAAAATTTT" + strings.repeat("CG", 20) + "AAAATTTTAAAATTTT";
+def promoterLike as string init "AAAATTTTAAAATTTT" + strings.replicate("CG", 20) +
+    "AAAATTTTAAAATTTT";
 
 io.printf("\n\nCpG islands in a synthetic CG-dense stretch\n\n");
 for (def r in bioseq.cpgIslands($promoterLike, 20, 50.0, 0.6)) {
@@ -122,7 +123,7 @@ for (def r in bioseq.cpgIslands($promoterLike, 20, 50.0, 0.6)) {
 
 # GC-rich is not the same as CpG-rich, and the ratio test is what separates
 # them. This sequence is 100% GC and contains no CpG at all.
-def gcOnly as string init strings.repeat("G", 60) + strings.repeat("C", 60);
+def gcOnly as string init strings.replicate("G", 60) + strings.replicate("C", 60);
 io.printf(
     "\n  a 100%% GC sequence with no CpG dinucleotide: %d islands\n",
     len(bioseq.cpgIslands($gcOnly, 20, 50.0, 0.6)));

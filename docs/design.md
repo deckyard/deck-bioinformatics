@@ -225,5 +225,6 @@ a caller would; `bench.j` runs in CI.
 
 ## Dependencies on the interpreter
 
-Floor `>=0.26.0` for `jennifer` and `jennifer-tiny`, set by `decimal`, which
-the exact CpG thresholds use. No capability.
+Floor `>=0.27.0` for `jennifer` and `jennifer-tiny`, set by the UTF-8 codecs
+of `encoding.encode` / `decode` and `strings.replicate`. The exact CpG
+thresholds use `decimal` (0.26). No capability.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - search: finding things inside a sequence.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -63,7 +63,7 @@ export func find(s as string, pattern as string) {
     def subject as string init requireSequence($s);
     def needle as string init requireSequence($pattern);
     requireFits($subject, $needle);
-    return scanExact(convert.bytesFromString("utf-8", $subject), $needle, 1);
+    return scanExact(encoding.encode("utf-8", $subject), $needle, 1);
 }
 
 /**
@@ -91,15 +91,15 @@ export func findIupac(s as string, pattern as string) {
     # U -> T keeps lengths and offsets, so the folded subject is searched and
     # only the reported text is taken back from the unfolded one
     def folded as string init strings.replace($subject, "U", "T");
-    def hay as bytes init convert.bytesFromString("utf-8", $folded);
+    def hay as bytes init encoding.encode("utf-8", $folded);
     def hits as list of Match init matchIupac($hay, strings.replace($needle, "U", "T"), 1);
     if ($folded == $subject) {
         return $hits;
     }
-    def original as bytes init convert.bytesFromString("utf-8", $subject);
+    def original as bytes init encoding.encode("utf-8", $subject);
     def out as list of Match;
     for (def m in $hits) {
-        $m.text = convert.stringFromBytes("utf-8", binary.slice($original, $m.start, $m.end));
+        $m.text = encoding.decode("utf-8", $original[$m.start..$m.end]);
         $out[] = $m;
     }
     return $out;
@@ -175,7 +175,7 @@ func matchIupac(hay as bytes, needle as string, strand as int) {
 func scanIupac(hay as bytes, needle as string, strand as int) {
     def expansions as list of bytes;
     for (def code in strings.chars($needle)) {
-        $expansions[] = convert.bytesFromString("utf-8", expandIupac($code));
+        $expansions[] = encoding.encode("utf-8", expandIupac($code));
     }
     def m as int init len($needle);
     def anchor as int init anchorByte($expansions[0]);
@@ -193,7 +193,7 @@ func scanIupac(hay as bytes, needle as string, strand as int) {
             $out[] = Match{
                 start: $i,
                 end: $i + $m,
-                text: convert.stringFromBytes("utf-8", binary.slice($hay, $i, $i + $m)),
+                text: encoding.decode("utf-8", $hay[$i..$i + $m]),
                 strand: $strand,
                 mismatches: 0
             };
@@ -216,7 +216,7 @@ func scanIupac(hay as bytes, needle as string, strand as int) {
  * @internal
  */
 func scanExact(hay as bytes, needle as string, strand as int) {
-    def pin as bytes init convert.bytesFromString("utf-8", $needle);
+    def pin as bytes init encoding.encode("utf-8", $needle);
     def m as int init len($pin);
     def n as int init len($hay);
     def out as list of Match;
@@ -229,7 +229,7 @@ func scanExact(hay as bytes, needle as string, strand as int) {
         $out[] = Match{
             start: $start,
             end: $start + $m,
-            text: convert.stringFromBytes("utf-8", binary.slice($hay, $start, $start + $m)),
+            text: encoding.decode("utf-8", $hay[$start..$start + $m]),
             strand: $strand,
             mismatches: 0
         };
@@ -291,8 +291,8 @@ export func findFuzzy(s as string, pattern as string, maxMismatches as int) {
     if ($maxMismatches < 0) {
         raiseError("mismatch tolerance cannot be negative, got " + convert.toString($maxMismatches));
     }
-    def hay as bytes init convert.bytesFromString("utf-8", $subject);
-    def pin as bytes init convert.bytesFromString("utf-8", $needle);
+    def hay as bytes init encoding.encode("utf-8", $subject);
+    def pin as bytes init encoding.encode("utf-8", $needle);
     def m as int init len($pin);
     def last as int init len($hay) - $m;
     def out as list of Match;
@@ -302,7 +302,7 @@ export func findFuzzy(s as string, pattern as string, maxMismatches as int) {
             $out[] = Match{
                 start: $i,
                 end: $i + $m,
-                text: convert.stringFromBytes("utf-8", binary.slice($hay, $i, $i + $m)),
+                text: encoding.decode("utf-8", $hay[$i..$i + $m]),
                 strand: 1,
                 mismatches: $misses
             };
@@ -461,7 +461,7 @@ func collectOrfs(
     table as map of string to string,
     minAa as int) {
     def out as list of Orf;
-    def strandBytes as bytes init convert.bytesFromString("utf-8", $strandSequence);
+    def strandBytes as bytes init encoding.encode("utf-8", $strandSequence);
     def n as int init len($strandBytes);
     def openAt as int init -1;
     def i as int init $offset - 1;
@@ -472,7 +472,7 @@ func collectOrfs(
         $kb[] = $strandBytes[$i];
         $kb[] = $strandBytes[$i + 1];
         $kb[] = $strandBytes[$i + 2];
-        def codon as string init convert.stringFromBytes("utf-8", $kb);
+        def codon as string init encoding.decode("utf-8", $kb);
         if ($openAt < 0) {
             if (maps.has($startSet, $codon)) {
                 $openAt = $i;
@@ -533,9 +533,7 @@ func recordOrf(
     if ($residues < $minAa) {
         return $out;
     }
-    def nucleotides as string init convert.stringFromBytes(
-        "utf-8",
-        binary.slice($strandBytes, $from, $upto));
+    def nucleotides as string init encoding.decode("utf-8", $strandBytes[$from..$upto]);
     def protein as string init translateClean($nucleotides, $table);
     if ($stopped and len($protein) > 0) {
         $protein = $protein[0..len($protein) - 1];
@@ -626,7 +624,7 @@ export func cpgIslands(s as string, window as int, minGc as float, minObsExp as 
     if ($n < $window) {
         return $out;
     }
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
 
     # Thresholds as exact fractions: the float division this replaced rounded
     # twice and rejected a window at exactly 0.65. Integer cross-multiplication
@@ -898,7 +896,7 @@ export func restrictionSites(s as string, names as list of string) {
     def clean as string init requireDna($s);
     def found as list of Site;
     def asked as map of string to bool;
-    def hay as bytes init convert.bytesFromString("utf-8", $clean);
+    def hay as bytes init encoding.encode("utf-8", $clean);
     for (def name in $names) {
         def e as Enzyme init enzyme($name);
         if (maps.has($asked, $e.name)) {
@@ -1108,7 +1106,7 @@ func sitePrecedes(a as Site, b as Site) {
  */
 export func enzymesCutting(s as string) {
     def clean as string init requireDna($s);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def out as list of string;
     for (def e in enzymes()) {
         if (len($e.site) > len($clean)) {
@@ -1120,7 +1118,7 @@ export func enzymesCutting(s as string) {
         # of the seventy-six sites take this path; only the degenerate ones pay
         # for the call below.
         if (isExactSite($e.site)) {
-            if (binary.indexOf($buf, convert.bytesFromString("utf-8", $e.site)) >= 0) {
+            if (binary.indexOf($buf, encoding.encode("utf-8", $e.site)) >= 0) {
                 $out[] = $e.name;
             }
         } elseif (hasSite($buf, $e.site)) {
@@ -1148,7 +1146,7 @@ func hasSite(hay as bytes, needle as string) {
     # for those the whole question is one native substring search. Only the nine
     # degenerate sites need the interpreted scan below.
     if (isExactSite($needle)) {
-        return binary.indexOf($hay, convert.bytesFromString("utf-8", $needle)) >= 0;
+        return binary.indexOf($hay, encoding.encode("utf-8", $needle)) >= 0;
     }
     # A degenerate site stands for a small set of concrete ones - `CCWGG` is two
     # sequences, `GANTC` four - and each of those can go to the native search
@@ -1157,7 +1155,7 @@ func hasSite(hay as bytes, needle as string) {
     def concrete as list of string init expandSite($needle, MAX_SITE_EXPANSION);
     if (len($concrete) > 0) {
         for (def pattern in $concrete) {
-            if (binary.indexOf($hay, convert.bytesFromString("utf-8", $pattern)) >= 0) {
+            if (binary.indexOf($hay, encoding.encode("utf-8", $pattern)) >= 0) {
                 return true;
             }
         }
@@ -1165,7 +1163,7 @@ func hasSite(hay as bytes, needle as string) {
     }
     def expansions as list of bytes;
     for (def code in strings.chars($needle)) {
-        $expansions[] = convert.bytesFromString("utf-8", expandIupac($code));
+        $expansions[] = encoding.encode("utf-8", expandIupac($code));
     }
     def m as int init len($needle);
     def anchor as int init anchorByte($expansions[0]);
@@ -1231,7 +1229,7 @@ func expandSite(needle as string, maxPatterns as int) {
  * @internal
  */
 func isExactSite(needle as string) {
-    def buf as bytes init convert.bytesFromString("utf-8", $needle);
+    def buf as bytes init encoding.encode("utf-8", $needle);
     def n as int init len($buf);
     for (def i as int init 0; $i < $n; $i = $i + 1) {
         def c as int init $buf[$i];

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - core: alphabets, validation, and the byte-loop conventions every
 # other topic is built on. Spliced into bioinformatics.j via include - not a standalone
@@ -192,7 +192,7 @@ func describeCode(code as int) {
     }
     def one as bytes;
     $one[] = $code;
-    return "'" + convert.stringFromBytes("utf-8", $one) + "'";
+    return "'" + encoding.decode("utf-8", $one) + "'";
 }
 
 # ------------------------------------------------------------ filters (lenient)
@@ -241,7 +241,7 @@ export func filterProtein(s as string) {
  * @internal
  */
 func filterBy(s as string, admits as list of bool) {
-    def buf as bytes init convert.bytesFromString("utf-8", $s);
+    def buf as bytes init encoding.encode("utf-8", $s);
     def n as int init len($buf);
     def out as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -253,7 +253,7 @@ func filterBy(s as string, admits as list of bool) {
             $out[] = $code;
         }
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 # ------------------------------------------------------------------ predicates
@@ -302,7 +302,7 @@ export func isProtein(s as string) {
  * @internal
  */
 func isAll(s as string, admits as list of bool) {
-    def buf as bytes init convert.bytesFromString("utf-8", $s);
+    def buf as bytes init encoding.encode("utf-8", $s);
     def n as int init len($buf);
     if ($n == 0) {
         return false;
@@ -347,7 +347,7 @@ func normalizeBy(s as string, admits as list of bool, pattern as string, what as
     if (len($s) > 0 and regex.matches($pattern, $s)) {
         return $s;
     }
-    def buf as bytes init convert.bytesFromString("utf-8", $s);
+    def buf as bytes init encoding.encode("utf-8", $s);
     def n as int init len($buf);
     def out as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -384,7 +384,7 @@ func normalizeBy(s as string, admits as list of bool, pattern as string, what as
     if (len($out) == 0) {
         raiseError("empty " + $what + " sequence");
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 /**

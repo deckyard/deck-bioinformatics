@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - white-box tests for the compare topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -495,7 +495,7 @@ func testEditDistanceIsCapped() {
 
 func editDistanceTooLarge() {
     # one cell over the limit, and cheap to validate
-    editDistance(strings.repeat("A", MAX_EDIT_DISTANCE_CELLS + 1), "A");
+    editDistance(strings.replicate("A", MAX_EDIT_DISTANCE_CELLS + 1), "A");
 }
 
 func testLocalWithNoPositivePairIsEmpty() {

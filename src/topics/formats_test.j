@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - white-box tests for the formats topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -626,7 +626,7 @@ func testWrapCutsOnCharacters() {
 func testLargeRecordsRoundTrip() {
     # the joined-pieces paths, over enough lines and records to exercise them:
     # 250 lines of 60 plus one of 7 is 15 007 bases
-    def body as string init strings.repeat("ACGTAC", 2501) + "A";
+    def body as string init strings.replicate("ACGTAC", 2501) + "A";
     def recs as list of Record init parseFasta(writeFasta([
         Record{id: "big", description: "", sequence: $body}
     ]));

@@ -93,7 +93,7 @@ CpG count over the expected `(C count * G count) / length` is at least
 `minObsExp`. The obs/exp test separates CpG-rich from merely GC-rich:
 
 ```jennifer
-def gcOnly as string init strings.repeat("G", 60) + strings.repeat("C", 60);
+def gcOnly as string init strings.replicate("G", 60) + strings.replicate("C", 60);
 bioseq.gcContent($gcOnly);                             # 100.0
 len(bioseq.cpgIslands($gcOnly, 20, 50.0, 0.6));        # 0
 ```

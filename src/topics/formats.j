@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - formats: FASTA and FASTQ, over strings.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -105,7 +105,7 @@ func stripSpace(line as string) {
     if (not regex.matches('[ \t]', $line)) {
         return $line;
     }
-    def buf as bytes init convert.bytesFromString("utf-8", $line);
+    def buf as bytes init encoding.encode("utf-8", $line);
     def n as int init len($buf);
     def out as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -115,7 +115,7 @@ func stripSpace(line as string) {
         }
         $out[] = $code;
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 /**
@@ -343,10 +343,10 @@ export func wrap(s as string, width as int) {
     # One native slice per line. ASCII text (every real sequence) is cut on
     # bytes; anything else on runes, so a multi-byte character is never split.
     def lines as list of string;
-    def buf as bytes init convert.bytesFromString("utf-8", $s);
+    def buf as bytes init encoding.encode("utf-8", $s);
     if (len($buf) == $n) {
         for (def i as int init 0; $i < $n; $i = $i + $width) {
-            $lines[] = convert.stringFromBytes("utf-8", $buf[$i..math.min($i + $width, $n)]);
+            $lines[] = encoding.decode("utf-8", $buf[$i..math.min($i + $width, $n)]);
         }
     } else {
         def chars as list of string init strings.chars($s);
@@ -384,7 +384,7 @@ export func toPlain(text as string) {
             $out[] = $line;
             continue;
         }
-        def buf as bytes init convert.bytesFromString("utf-8", $line);
+        def buf as bytes init encoding.encode("utf-8", $line);
         def kept as bytes;
         def n as int init len($buf);
         for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -397,7 +397,7 @@ export func toPlain(text as string) {
             }
             $kept[] = $code;
         }
-        $out[] = convert.stringFromBytes("utf-8", $kept);
+        $out[] = encoding.decode("utf-8", $kept);
     }
     return strings.join($out, "");
 }
@@ -526,7 +526,7 @@ func requireQualityText(quality as string, id as string) {
     if (regex.matches('^[!-~]*$', $quality)) {
         return;
     }
-    def buf as bytes init convert.bytesFromString("utf-8", $quality);
+    def buf as bytes init encoding.encode("utf-8", $quality);
     for (def i as int init 0; $i < len($buf); $i = $i + 1) {
         if ($buf[$i] < 33 or $buf[$i] > 126) {
             raiseError("quality " + describeCode($buf[$i]) + " in read '" + $id +
@@ -652,7 +652,7 @@ export func qualityScoresWith(r as Read, offset as int) {
         raiseError("read '" + $r.id + "' has " + convert.toString(len($r.sequence)) +
             " bases but " + convert.toString(len($r.quality)) + " quality characters");
     }
-    def buf as bytes init convert.bytesFromString("utf-8", $r.quality);
+    def buf as bytes init encoding.encode("utf-8", $r.quality);
     def n as int init len($buf);
     def out as list of int;
     for (def i as int init 0; $i < $n; $i = $i + 1) {

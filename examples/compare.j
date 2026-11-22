@@ -1,7 +1,7 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - comparing two sequences.
 #
@@ -100,8 +100,8 @@ io.printf("  (the core was planted at offset 30 - the alignment reaches past it,
 io.printf("   because a +2/-1 scheme still scores random flanks above zero)\n");
 
 # With flanks that cannot align at all, the boundaries land exactly.
-def cleanOne as string init strings.repeat("T", 20) + $core + strings.repeat("T", 20);
-def cleanOther as string init strings.repeat("A", 12) + $core + strings.repeat("A", 12);
+def cleanOne as string init strings.replicate("T", 20) + $core + strings.replicate("T", 20);
+def cleanOther as string init strings.replicate("A", 12) + $core + strings.replicate("A", 12);
 def exact as bioseq.Alignment init bioseq.alignLocal($cleanOne, $cleanOther, $dna);
 io.printf("\n  with poly-T against poly-A flanks, the boundaries are exact:\n");
 io.printf(

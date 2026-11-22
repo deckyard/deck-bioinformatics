@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - white-box tests for the core topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -10,7 +10,7 @@
 # speed. This derives them back from the human-readable alphabet strings and
 # fails if the two ever drift apart, so the magic numbers cannot go stale.
 func codesOf(alphabet as string) {
-    def buf as bytes init convert.bytesFromString("utf-8", $alphabet);
+    def buf as bytes init encoding.encode("utf-8", $alphabet);
     def out as map of int to bool;
     for (def i as int init 0; $i < len($buf); $i = $i + 1) {
         $out[$buf[$i]] = true;
@@ -266,7 +266,7 @@ func patternAgrees(pattern as string, admits as list of bool) {
     for (def code as int init 1; $code < 128; $code = $code + 1) {
         def one as bytes;
         $one[] = $code;
-        if (regex.matches($pattern, convert.stringFromBytes("utf-8", $one)) != $admits[$code]) {
+        if (regex.matches($pattern, encoding.decode("utf-8", $one)) != $admits[$code]) {
             return false;
         }
     }

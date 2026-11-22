@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - white-box tests for the search topic.
 # Spliced into bioinformatics_test.j via include - run with:
@@ -272,7 +272,7 @@ func orfUnknownTable() {
 
 func testCpgIslandFound() {
     # a CG-dense stretch flanked by AT-rich sequence
-    def dna as string init "AAAATTTTAAAATTTT" + strings.repeat("CG", 20) + "AAAATTTTAAAATTTT";
+    def dna as string init "AAAATTTTAAAATTTT" + strings.replicate("CG", 20) + "AAAATTTTAAAATTTT";
     def islands as list of Region init cpgIslands($dna, 20, 50.0, 0.6);
     testing.assertEqual(len($islands), 1);
     def island as Region init $islands[0];
@@ -288,7 +288,7 @@ func testCpgIslandFound() {
 }
 
 func testNoIslandInAtRichSequence() {
-    testing.assertEqual(len(cpgIslands(strings.repeat("ATAT", 40), 20, 50.0, 0.6)), 0);
+    testing.assertEqual(len(cpgIslands(strings.replicate("ATAT", 40), 20, 50.0, 0.6)), 0);
 }
 
 func testGcRichIsNotEnough() {
@@ -296,14 +296,14 @@ func testGcRichIsNotEnough() {
     # which is the whole point of the observed/expected criterion. Note how hard
     # such a sequence is to construct: any alternating GC block has a C followed
     # by a G at some junction, so this needs every G before every C.
-    def dna as string init strings.repeat("G", 60) + strings.repeat("C", 60);
+    def dna as string init strings.replicate("G", 60) + strings.replicate("C", 60);
     testing.assertTrue(gcContent($dna) == 100.0);
     testing.assertEqual(len(find($dna, "CG")), 0);
     testing.assertEqual(len(cpgIslands($dna, 20, 50.0, 0.6)), 0);
 }
 
 func testCpgRegionStatisticsAreConsistent() {
-    def dna as string init "AAAATTTTAAAATTTT" + strings.repeat("CG", 20) + "AAAATTTTAAAATTTT";
+    def dna as string init "AAAATTTTAAAATTTT" + strings.replicate("CG", 20) + "AAAATTTTAAAATTTT";
     for (def r in cpgIslands($dna, 20, 50.0, 0.6)) {
         # the reported GC is the GC of the reported span
         testing.assertTrue(close($r.gc, gcContent($dna[$r.start..$r.end]), 0.000001));
@@ -547,7 +547,7 @@ func testExpandedScanAgreesWithInterpretedScan() {
     # cross-implementation: the expansion path and the interpreted fallback must
     # report the same matches for every degenerate site in the table
     math.randSeed(11);
-    def dna as bytes init convert.bytesFromString("utf-8", randomDna(3000));
+    def dna as bytes init encoding.encode("utf-8", randomDna(3000));
     for (def e in enzymes()) {
         if (isExactSite($e.site)) {
             continue;
@@ -615,9 +615,7 @@ func testReverseStrandCutUsesCutBottom() {
         overhang: "5'",
         overhangLength: 3
     };
-    def sites as list of Site init enzymeSites(
-        convert.bytesFromString("utf-8", "AAAATGCGTCAAAA"),
-        $e);
+    def sites as list of Site init enzymeSites(encoding.encode("utf-8", "AAAATGCGTCAAAA"), $e);
     testing.assertEqual(len($sites), 1);
     testing.assertEqual($sites[0].strand, -1);
     testing.assertEqual($sites[0].start, 4);
@@ -632,7 +630,7 @@ func testKeyedSortAgreesWithMergeSort() {
     # cross-implementation: the native keyed sort and the merge sort it replaced
     # must give the same order, ties included
     math.randSeed(5);
-    def hay as bytes init convert.bytesFromString("utf-8", randomDna(4000));
+    def hay as bytes init encoding.encode("utf-8", randomDna(4000));
     def all as list of Site;
     for (def e in enzymes()) {
         for (def site in enzymeSites($hay, $e)) {

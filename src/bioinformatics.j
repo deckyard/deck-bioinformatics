@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 /**
  * @deckyard/bioinformatics - sequence manipulation for DNA, RNA and protein.
@@ -45,6 +45,7 @@ use lists;
 use math;
 use regex;
 use decimal;
+use encoding;
 
 # Reference data first: the generated *data.j files declare the tables that the
 # hand-written topic files immediately above them read.

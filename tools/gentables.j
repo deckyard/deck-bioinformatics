@@ -1,7 +1,7 @@
 #!/usr/bin/env -S jennifer run
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # Generate src/topics/tabledata.j.
 #
@@ -29,6 +29,7 @@ use strings;
 use lists;
 use maps;
 use convert;
+use encoding;
 
 # --------------------------------------------------------------------- data
 
@@ -468,7 +469,7 @@ func denseList(values as map of int to string, fill as string) {
 }
 
 func codeOf(one as string) {
-    return convert.bytesFromString('utf-8', $one)[0];
+    return encoding.encode('utf-8', $one)[0];
 }
 
 def emitted as list of string;
@@ -600,7 +601,7 @@ for (def a in strings.chars('ARNDCQEGHILKMFPSTWYV')) {
 
 emit('# SPDX-License-Identifier: LGPL-3.0-only');
 emit('# SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>');
-emit('# pragma-jennifer-version: >=0.26.0');
+emit('# pragma-jennifer-version: >=0.27.0');
 emit('');
 emit('# bioinformatics - table data: the reference data the rest of the deck reads.');
 emit('# Spliced into bioinformatics.j via include - not a standalone module.');

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 # SPDX-FileCopyrightText: Copyright (C) 2026 mplx <mplx@jennifer-lang.dev>
-# pragma-jennifer-version: >=0.26.0
+# pragma-jennifer-version: >=0.27.0
 
 # bioinformatics - transforms: turning one sequence into another.
 # Spliced into bioinformatics.j via include - not a standalone module.
@@ -60,12 +60,12 @@ export func reverseComplement(s as string) {
  */
 export func reverse(s as string) {
     def clean as string init requireSequence($s);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def out as bytes;
     for (def i as int init len($buf) - 1; $i >= 0; $i = $i - 1) {
         $out[] = $buf[$i];
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 /**
@@ -81,7 +81,7 @@ export func reverse(s as string) {
  * @internal
  */
 func isRnaSpelling(clean as string) {
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     def sawT as bool init false;
     def sawU as bool init false;
@@ -110,7 +110,7 @@ func isRnaSpelling(clean as string) {
  * @internal
  */
 func complementBytes(clean as string, rna as bool, backwards as bool) {
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     def out as bytes;
     if ($backwards) {
@@ -130,7 +130,7 @@ func complementBytes(clean as string, rna as bool, backwards as bool) {
             }
         }
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 # -------------------------------------------------------------- transcription
@@ -173,7 +173,7 @@ export func backTranscribe(rna as string) {
  * @internal
  */
 func swapCode(clean as string, oldCode as int, newCode as int) {
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf);
     def out as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 1) {
@@ -183,7 +183,7 @@ func swapCode(clean as string, oldCode as int, newCode as int) {
             $out[] = $buf[$i];
         }
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 # --------------------------------------------------------------- translation
@@ -321,7 +321,7 @@ export func sixFrameWith(nt as string, table as map of string to string) {
  */
 func requireCodonTable(table as map of string to string) {
     for (def codon in $table) {
-        def value as bytes init convert.bytesFromString("utf-8", $table[$codon]);
+        def value as bytes init encoding.encode("utf-8", $table[$codon]);
         if (len($value) != 1 or $value[0] >= 128) {
             raiseError("codon table maps '" + $codon + "' to " + summarise($table[$codon]) +
                 ", not a single one-letter residue");
@@ -367,7 +367,7 @@ export def struct Frame {
  * @internal
  */
 func translateClean(clean as string, table as map of string to string) {
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf) - len($buf) % 3;
     def out as bytes;
     for (def i as int init 0; $i < $n; $i = $i + 3) {
@@ -388,17 +388,17 @@ func translateClean(clean as string, table as map of string to string) {
         $kb[] = $a;
         $kb[] = $b;
         $kb[] = $c;
-        def codon as string init convert.stringFromBytes("utf-8", $kb);
+        def codon as string init encoding.decode("utf-8", $kb);
         if (maps.has($table, $codon)) {
-            def aa as bytes init convert.bytesFromString("utf-8", $table[$codon]);
+            def aa as bytes init encoding.encode("utf-8", $table[$codon]);
             $out[] = $aa[0];
         } else {
             def resolved as string init resolveAmbiguous($codon, $table);
-            def aa as bytes init convert.bytesFromString("utf-8", $resolved);
+            def aa as bytes init encoding.encode("utf-8", $resolved);
             $out[] = $aa[0];
         }
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 /**
@@ -468,7 +468,7 @@ func expandCodon(chars as list of string) {
  */
 export func splitCodons(nt as string) {
     def clean as string init requireNucleotide($nt);
-    def buf as bytes init convert.bytesFromString("utf-8", $clean);
+    def buf as bytes init encoding.encode("utf-8", $clean);
     def n as int init len($buf) - len($buf) % 3;
     def out as list of string;
     for (def i as int init 0; $i < $n; $i = $i + 3) {
@@ -476,7 +476,7 @@ export func splitCodons(nt as string) {
         $kb[] = $buf[$i];
         $kb[] = $buf[$i + 1];
         $kb[] = $buf[$i + 2];
-        $out[] = convert.stringFromBytes("utf-8", $kb);
+        $out[] = encoding.decode("utf-8", $kb);
     }
     return $out;
 }
@@ -498,12 +498,12 @@ export func oneToThree(protein as string) {
     def clean as string init requireProtein($protein);
     def out as bytes;
     for (def one in strings.chars($clean)) {
-        def spelled as bytes init convert.bytesFromString("utf-8", THREE_LETTER[$one]);
+        def spelled as bytes init encoding.encode("utf-8", THREE_LETTER[$one]);
         $out[] = $spelled[0];
         $out[] = $spelled[1];
         $out[] = $spelled[2];
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
 
 /**
@@ -523,7 +523,7 @@ export func threeToOne(protein as string) {
     # Walk the bytes rather than slicing the string every three characters: a
     # string slice is rune-indexed, so taking one at offset i costs O(i) and the
     # whole loop goes quadratic. Separators are dropped in the same pass.
-    def buf as bytes init convert.bytesFromString("utf-8", $protein);
+    def buf as bytes init encoding.encode("utf-8", $protein);
     def n as int init len($buf);
     # `at` holds each kept byte's offset in the input, for the error message.
     def kept as bytes;
@@ -557,13 +557,13 @@ export func threeToOne(protein as string) {
         $group[] = $kept[$i];
         $group[] = $kept[$i + 1];
         $group[] = $kept[$i + 2];
-        def code as string init convert.stringFromBytes("utf-8", $group);
+        def code as string init encoding.decode("utf-8", $group);
         if (not maps.has(ONE_LETTER, $code)) {
             raiseError("not a three-letter residue code: '" + $code + "' at position " +
                 convert.toString($at[$i]));
         }
-        def one as bytes init convert.bytesFromString("utf-8", ONE_LETTER[$code]);
+        def one as bytes init encoding.encode("utf-8", ONE_LETTER[$code]);
         $out[] = $one[0];
     }
-    return convert.stringFromBytes("utf-8", $out);
+    return encoding.decode("utf-8", $out);
 }
