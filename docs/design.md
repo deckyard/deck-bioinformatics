@@ -97,14 +97,16 @@ regression. `jennifer run examples/bench.j` shows yours.
 
 ### Byte loops, not string indexing
 
-Jennifer strings are rune-indexed, so `$s[$i..$i + 1]` rescans from the start on
-every access and a per-residue loop goes quadratic. Sequences are ASCII, so every
-hot loop converts once to `bytes`, indexes that, and converts back.
+On Jennifer 0.27.0 a slice of an ASCII string costs the same wherever it
+starts, so `$s[$i..$i + 1]` over a sequence is linear. A string holding any
+non-ASCII character is still rescanned from the start on every slice, and a
+per-character loop over it is quadratic. Indexing `bytes` stays faster, so
+hot loops convert once to `bytes`, index that, and convert back:
 
-| over 20 000 residues | |
+| over 20 000 residues, Jennifer 0.27.0 | |
 | - | - |
-| `$s[$i..$i + 1]` | 1545 ms |
-| `$b[$i]` on a `bytes` buffer | 38 ms |
+| `$s[$i..$i + 1]` | 28 ms |
+| `$b[$i]` on a `bytes` buffer | 18 ms |
 
 ### Accretion into a bytes buffer
 
@@ -123,18 +125,20 @@ string `+` onto a growing result made an 8000-read FASTQ write take 28 s and an
 
 ### Plain maps beat clever encodings
 
-Three implementations of `translate`, over 10 000 codons:
+Three implementations of the `translate` loop, over 10 000 codons:
 
-| | |
+| Jennifer 0.27.0 | |
 | - | - |
-| string-slice codon key | 1094 ms |
-| key rebuilt from bytes, map lookup | **63 ms** |
-| base-4 packed index into a 64-entry string | 78 ms |
+| string-slice codon key, map lookup | **27 ms** |
+| key rebuilt from bytes, map lookup | 59 ms |
+| base-4 packed index into a 64-entry table | 33 ms |
 
-The packed index lost because its three helper calls per codon cost more than
-the lookup they replaced. So the genetic codes stay plain
+The packed index loses to the slice key because its three helper calls per
+codon cost more than the slice. So the genetic codes stay plain
 `map of string to string`, and a helper call inside a per-residue loop is
 avoided: case folding is written inline as `if ($c >= 97 and $c <= 122)`.
+`translate` still rebuilds each key from bytes, which costs twice the slice
+key: a `bytes` buffer and a decode per codon.
 
 ### Clean input takes a fast path
 

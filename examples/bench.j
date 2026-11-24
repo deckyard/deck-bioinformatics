@@ -42,10 +42,11 @@ def seq as string init makeSeq(N);
 io.printf("bioinformatics benchmarks - %d nt\n\n", len($seq));
 
 # ---------------------------------------------------------------------------
-# 1. Per-residue access. Jennifer strings are rune-indexed, so `$s[$i..$i + 1]`
-#    rescans the string on every access and the loop goes quadratic. The gap is
-#    around 40x at this N, on every machine it has been run on. Hence: every
-#    per-residue loop in this deck walks a `bytes` buffer.
+# 1. Per-residue access. On Jennifer 0.27.0 slicing an ASCII string costs the
+#    same wherever the slice starts, so both loops are linear and the bytes
+#    loop is about 1.5x faster (a string with any non-ASCII character is still
+#    rescanned on every slice). Hence: every per-residue loop in this deck walks
+#    a `bytes` buffer.
 # ---------------------------------------------------------------------------
 
 io.printf("1. per-residue access\n");
