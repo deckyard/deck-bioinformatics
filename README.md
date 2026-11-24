@@ -59,6 +59,15 @@ git clone https://github.com/jennifer-language/grimoire .grimoire
 jennifer run .grimoire/bin/grimoire serve
 ```
 
+## Trademarks
+
+Illumina™ is a trademark of Illumina, Inc. ExPASy™ is a trademark of the SIB
+Swiss Institute of Bioinformatics. Other product and company names may be
+trademarks of their respective owners. They are used only to identify the
+conventions and data sources this deck follows. This deck is an independent
+project, not affiliated with, sponsored or endorsed by Illumina, Inc. or the
+SIB Swiss Institute of Bioinformatics.
+
 ## Licence
 
 LGPL-3.0-only, see [LICENSE](LICENSE). Copyright (C) 2026 mplx &lt;mplx@jennifer-lang.dev&gt;.

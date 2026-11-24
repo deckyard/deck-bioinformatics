@@ -44,7 +44,7 @@ Average masses, in daltons.
   synthetic oligo): residue masses + `WATER_AVG_MASS` - `PHOSPHATE_MASS`. Roughly
   double it for a duplex.
 - `PROTEIN`: residue masses (`avgMass` of each [`AminoAcid`](tables.md#residue-properties))
-  + one water, the ExPASy convention.
+  + one water, the ExPASy™ convention.
 
 Ambiguity codes raise ([why](sequences.md#ambiguity-codes-are-rejected-not-averaged)).
 
@@ -103,7 +103,7 @@ charged above, all bases below) instead of overflowing.
 within 1e-4 of zero or after 100 steps. The pKa values are the EMBOSS `iep` set
 (`PKA_N_TERMINUS`, `PKA_C_TERMINUS`, `AminoAcid.pKa`); EMBOSS, ExPASy and
 Sillero differ by a few tenths of a unit, so compare against `iep`, not
-ProtParam.
+ProtParam™.
 
 **GRAVY**: mean Kyte-Doolittle hydropathy. Positive is hydrophobic; soluble
 globular proteins typically score -0.5 to -1.5. The preproinsulin signal

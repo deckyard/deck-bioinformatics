@@ -49,3 +49,12 @@ Melting temperatures, isoelectric points and masses depend on published
 parameter sets that disagree with each other. Each function names its set in
 its docblock and the parameters are exported constants
 ([Parameter constants](tables.md#parameter-constants)).
+
+## Trademarks
+
+Illumina™ is a trademark of Illumina, Inc. ExPASy™ is a trademark of the SIB
+Swiss Institute of Bioinformatics. Other product and company names may be
+trademarks of their respective owners. They are used only to identify the
+conventions and data sources this deck follows. This deck is an independent
+project, not affiliated with, sponsored or endorsed by Illumina, Inc. or the
+SIB Swiss Institute of Bioinformatics.

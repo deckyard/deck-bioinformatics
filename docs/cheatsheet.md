@@ -211,7 +211,7 @@ suffix makes a default explicit.
 | - | - | - |
 | `FASTA_WIDTH` | `60` | default line width |
 | `MAX_RECORDS` | `1000000` | records per parse |
-| `PHRED33` | `33` | Sanger, Illumina 1.8+ |
+| `PHRED33` | `33` | Sanger, Illumina™ 1.8+ |
 | `PHRED64` | `64` | Illumina 1.3 to 1.7 |
 
 ### `Record`

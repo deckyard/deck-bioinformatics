@@ -27,5 +27,5 @@ jennifer run examples/<topic>.j
   known restriction sites, which `search.j` digests; and the protein the first
   record translates to.
 - `reads.fastq`: four reads off the insulin fragment with realistic quality
-  profiles, one decaying toward the 3' end as Illumina data does and one poor
+  profiles, one decaying toward the 3' end as Illumina™ data does and one poor
   throughout.
