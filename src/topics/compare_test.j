@@ -372,7 +372,7 @@ func testDistancesAgreeWithAlignment() {
 # ------------------------------------------------- guards added after the audit
 
 func testAlignmentRefusesAnOversizedMatrix() {
-    # The matrix costs about a kilobyte per cell, so two large sequences would
+    # The matrix costs about 1.1 KB a cell on 0.27.0, so two large sequences would
     # exhaust memory rather than merely take a while. The guard raises instead.
     testing.assertThrows("alignTooBig", "limit");
 }

@@ -103,21 +103,21 @@ non-ASCII character is still rescanned from the start on every slice, and a
 per-character loop over it is quadratic. Indexing `bytes` stays faster, so
 hot loops convert once to `bytes`, index that, and convert back:
 
-| over 20 000 residues, Jennifer 0.27.0 | |
-| - | - |
-| `$s[$i..$i + 1]` | 28 ms |
-| `$b[$i]` on a `bytes` buffer | 18 ms |
+| over 20 000 residues | 0.27.0 | 0.28.0 |
+| - | - | - |
+| `$s[$i..$i + 1]` | 28 ms | 15 ms |
+| `$b[$i]` on a `bytes` buffer | 18 ms | 10 ms |
 
 ### Accretion into a bytes buffer
 
 `lists.push` returns a new list each time, so building a result with it copies
 the whole result per step:
 
-| building a 20 000-residue result | |
-| - | - |
-| `lists.push` in a loop | 54 700 ms |
-| `$out[] = code;` append | 19 ms |
-| `$s + "A"` concatenation | 77 ms |
+| building a 20 000-residue result | 0.27.0 | 0.28.0 |
+| - | - | - |
+| `lists.push` in a loop | 54 700 ms | 27 900 ms |
+| `$out[] = code;` append | 19 ms | 7 ms |
+| `$s + "A"` concatenation | 160 ms | 160 ms |
 
 Parsers and writers collect pieces in a `list of string` and join once:
 string `+` onto a growing result made an 8000-read FASTQ write take 28 s and an
@@ -127,18 +127,20 @@ string `+` onto a growing result made an 8000-read FASTQ write take 28 s and an
 
 Three implementations of the `translate` loop, over 10 000 codons:
 
-| Jennifer 0.27.0 | |
-| - | - |
-| string-slice codon key, map lookup | **27 ms** |
-| key rebuilt from bytes, map lookup | 59 ms |
-| base-4 packed index into a 64-entry table | 33 ms |
+| | 0.27.0 | 0.28.0 |
+| - | - | - |
+| string-slice codon key, map lookup | **27 ms** | **12 ms** |
+| key rebuilt from bytes, map lookup | 59 ms | not measured |
+| base-4 packed index into a 64-entry table | 33 ms | not measured |
+| the deck's `translate` | 100 ms | 34 ms |
 
 The packed index loses to the slice key because its three helper calls per
 codon cost more than the slice. So the genetic codes stay plain
 `map of string to string`, and a helper call inside a per-residue loop is
 avoided: case folding is written inline as `if ($c >= 97 and $c <= 122)`.
-`translate` still rebuilds each key from bytes, which costs twice the slice
-key: a `bytes` buffer and a decode per codon.
+`translate` still rebuilds each key from bytes (a `bytes` buffer and a decode
+per codon), so a slice-key loop over the same map is about three times faster
+than it on both versions.
 
 ### Clean input takes a fast path
 
@@ -152,14 +154,15 @@ the admitted-character lists.
 
 Everything else is linear in sequence length.
 
-| | cells | |
-| - | - | - |
-| 50 x 50 | 2 500 | 8 ms |
-| 100 x 100 | 10 000 | 31 ms |
-| 200 x 200 | 40 000 | 120 ms |
-| 400 x 400 | 160 000 | 420 ms |
+| | cells | 0.27.0 | 0.28.0 |
+| - | - | - | - |
+| 50 x 50 | 2 500 | 8 ms | 4 ms |
+| 100 x 100 | 10 000 | 31 ms | 18 ms |
+| 200 x 200 | 40 000 | 120 ms | 79 ms |
+| 400 x 400 | 160 000 | 420 ms | 300 ms |
 
-About 380 000 cells a second: linear in cells, so quadratic in sequence length.
+About 380 000 cells a second on 0.27.0, about 500 000 on 0.28.0: linear in
+cells, so quadratic in sequence length.
 A few hundred residues a side is comfortable; a chromosome is out of scope. The
 50 x 50 row carries some fixed overhead; the linear shape shows from 100 x 100
 on. Memory and the `maxCells` guard are in
@@ -188,10 +191,14 @@ The input is treated as untrusted text; every bound is on memory or time.
 - `MAX_RECORDS` (1 000 000) caps FASTA and FASTQ parsing: a file of bare
   `>` lines expands about a hundredfold into records.
 - `AlignOptions.maxCells`, by default `DEFAULT_MAX_ALIGNMENT_CELLS`
-  (1 000 000), bounds an alignment's DP matrix. At about a kilobyte per cell
-  memory binds before time; 2000 x 2000 was an out-of-memory kill.
-- `MAX_EDIT_DISTANCE_CELLS` (2 500 000, about 5 s) bounds `editDistance`,
-  whose memory is linear, so time is what binds.
+  (1 000 000), bounds an alignment's DP matrix. At about 1.1 KB a cell on
+  0.27.0 memory binds before time: 1000 x 1000 takes 1135 MB, 2000 x 2000 is
+  an out-of-memory kill. On 0.28.0 a cell takes about 0.2 KB (1000 x 1000
+  221 MB, 2000 x 2000 636 MB in 7 s), so a 2 000 000 default becomes
+  reasonable once the floor is 0.28.0.
+- `MAX_EDIT_DISTANCE_CELLS` (2 500 000) bounds `editDistance`, whose memory is
+  linear, so time is what binds: 1500 x 1500 takes 5.5 s on 0.27.0, 3.0 s on
+  0.28.0.
 - IUPAC expansion is bounded (1024 concrete sequences) before the
   interpreted fallback takes over.
 

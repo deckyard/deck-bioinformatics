@@ -270,8 +270,8 @@ suffix makes a default explicit.
 
 | Constant | Value | Meaning |
 | - | - | - |
-| `DEFAULT_MAX_ALIGNMENT_CELLS` | `1000000` | default `maxCells`, about 1 GB |
-| `MAX_EDIT_DISTANCE_CELLS` | `2500000` | `editDistance` cells, about 5 s |
+| `DEFAULT_MAX_ALIGNMENT_CELLS` | `1000000` | default `maxCells`, about 1.1 GB on 0.27.0, 0.2 GB on 0.28.0 |
+| `MAX_EDIT_DISTANCE_CELLS` | `2500000` | `editDistance` cells, about 6 s on 0.27.0, 3.3 s on 0.28.0 (estimates) |
 
 ### `AlignOptions`
 

@@ -115,40 +115,51 @@ each costing one. A sequence shifted by one position (12 bases in
 | edit | 2 (one deletion, one insertion) |
 
 Edit distance keeps two rows of `len(b) + 1` entries: O(m) memory in the second
-sequence's length, O(n*m) time at about 2 microseconds a cell. `maxCells` does
-not apply; instead `len(a) * len(b)` above `MAX_EDIT_DISTANCE_CELLS` (2 500 000,
-about 5 seconds; 1500 x 1500 fits) raises kind `"limit"` before any work.
+sequence's length, O(n*m) time. `maxCells` does not apply; instead
+`len(a) * len(b)` above `MAX_EDIT_DISTANCE_CELLS` (2 500 000; 1500 x 1500 fits)
+raises kind `"limit"` before any work.
+
+| `editDistance`, 1500 x 1500 (2 250 000 cells) | time | per cell |
+| - | - | - |
+| Jennifer 0.27.0 | 5.5 s | about 2.4 microseconds |
+| Jennifer 0.28.0 | 3.0 s | about 1.3 microseconds |
 
 ## Performance and the memory limit
 
-Alignment is the deck's one O(n*m) surface: about 380 000 cells a second.
+Alignment is the deck's one O(n*m) surface: about 380 000 cells a second on
+Jennifer 0.27.0, about 500 000 on 0.28.0.
 
-| | cells | time |
-| - | - | - |
-| 50 x 50 | 2 500 | 8 ms |
-| 100 x 100 | 10 000 | 31 ms |
-| 200 x 200 | 40 000 | 120 ms |
-| 400 x 400 | 160 000 | 420 ms |
+| | cells | 0.27.0 | 0.28.0 |
+| - | - | - | - |
+| 50 x 50 | 2 500 | 8 ms | 4 ms |
+| 100 x 100 | 10 000 | 31 ms | 18 ms |
+| 200 x 200 | 40 000 | 120 ms | 79 ms |
+| 400 x 400 | 160 000 | 420 ms | 300 ms |
 
-Memory runs out first: every matrix entry is a boxed interpreter value, about a
-kilobyte per cell.
+Memory runs out first: every matrix entry is a boxed interpreter value, about
+1.1 KB a cell on 0.27.0 and about 0.2 KB on 0.28.0.
 
-| | cells | resident |
-| - | - | - |
-| 100 x 100 | 10 000 | 35 MB |
-| 350 x 350 | 122 500 | 151 MB |
-| 700 x 700 | 490 000 | 570 MB |
+| | cells | 0.27.0 resident | 0.28.0 resident | 0.28.0 time |
+| - | - | - | - | - |
+| 100 x 100 | 10 000 | 35 MB | 40 MB | 0.07 s |
+| 350 x 350 | 122 500 | 151 MB | 50 MB | 0.3 s |
+| 700 x 700 | 490 000 | 570 MB | 108 MB | 1.0 s |
+| 1000 x 1000 | 1 000 000 | 1135 MB | 221 MB | 2.4 s |
+| 1414 x 1414 | 2 000 000 | not measured | 339 MB | 4.2 s |
+| 2000 x 2000 | 4 000 000 | out of memory | 636 MB | 7.1 s |
 
-1000 x 1000 is about a gigabyte; 2000 x 2000 is an out-of-memory kill. So
-`AlignOptions.maxCells` defaults to `DEFAULT_MAX_ALIGNMENT_CELLS` (1 000 000).
-The matrix has `(len(a) + 1) * (len(b) + 1)` cells, and an alignment over the
-limit raises kind `"limit"` before allocating. Without the limit, aligning two untrusted
-sequences can take the process down.
+So `AlignOptions.maxCells` defaults to `DEFAULT_MAX_ALIGNMENT_CELLS`
+(1 000 000). The matrix has `(len(a) + 1) * (len(b) + 1)` cells, and an
+alignment over the limit raises kind `"limit"` before allocating. Without the
+limit, aligning two untrusted sequences can take the process down.
 
 ```jennifer
 def opts as bioseq.AlignOptions init bioseq.dnaOptions();
-$opts.maxCells = 4000000;   # about 4 GB
+$opts.maxCells = 4000000;   # about 4 GB on 0.27.0, 0.6 GB on 0.28.0
 ```
+
+On 0.28.0 a limit of 2 000 000 cells is reasonable; the default stays at
+1 000 000 while the deck's floor is 0.27.0.
 
 `0` removes the limit. `jennifer run examples/bench.j` reproduces the numbers;
 see [Design notes](design.md#alignment-is-the-one-quadratic-surface).

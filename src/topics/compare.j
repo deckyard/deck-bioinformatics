@@ -10,12 +10,14 @@
 # precomputed into a map keyed by the two bytes, so the inner loop builds no
 # string and calls no helper.
 #
-# Measured (examples/bench.j): about 380 000 cells a second; 200 x 200 about an
-# eighth of a second, 400 x 400 under half a second. Memory binds first: about
-# one kilobyte per cell, because every entry is a boxed interpreter value.
-# 700 x 700 measured 570 MB resident, so 1000 x 1000 is about a gigabyte and
-# 2000 x 2000 an out-of-memory kill. Hence `AlignOptions.maxCells`, on by default. Whole-genome
-# throughput is out of scope.
+# Measured (examples/bench.j) on Jennifer 0.27.0: about 380 000 cells a second;
+# 200 x 200 about an eighth of a second, 400 x 400 under half a second. Memory
+# binds first: about 1.1 KB a cell, because every entry is a boxed interpreter
+# value. 1000 x 1000 measured 1135 MB resident and 2000 x 2000 is an
+# out-of-memory kill. On 0.28.0: about 500 000 cells a second and about 0.2 KB
+# a cell (1000 x 1000 221 MB; 2000 x 2000 636 MB in 7 s). Hence
+# `AlignOptions.maxCells`, on by default. Whole-genome throughput is out of
+# scope.
 #
 # Gap scoring is linear; affine gaps are not implemented.
 
@@ -23,8 +25,9 @@
  * The default `AlignOptions.maxCells`: the largest DP matrix an alignment builds.
  *
  * The matrix has `(len(a) + 1) * (len(b) + 1)` cells, so 999 x 999 residues is
- * the largest square alignment under this limit. At about a kilobyte per cell
- * that is about a gigabyte resident.
+ * the largest square alignment under this limit: 1135 MB resident on Jennifer
+ * 0.27.0 (about 1.1 KB a cell), 221 MB on 0.28.0 (about 0.2 KB). Once the
+ * floor is 0.28.0, 2 000 000 is a reasonable default.
  */
 export def const DEFAULT_MAX_ALIGNMENT_CELLS as int init 1000000;
 
@@ -39,7 +42,8 @@ export def const DEFAULT_MAX_ALIGNMENT_CELLS as int init 1000000;
  *        `BLOSUM62`; when non-empty it replaces `matchScore` and
  *        `mismatchScore` entirely
  * @field maxCells {int} largest DP matrix to build, `(len(a) + 1) * (len(b) + 1)`
- *        cells; 0 or less removes the limit (about 1 KB per cell)
+ *        cells; 0 or less removes the limit (about 1.1 KB a cell on
+ *        0.27.0, 0.2 KB on 0.28.0)
  */
 export def struct AlignOptions {
     matchScore as int,
@@ -265,16 +269,17 @@ func align(a as string, b as string, opts as AlignOptions, local as bool) {
 /**
  * Refuse an alignment whose matrix would not fit in memory.
  *
- * The matrix is `(n + 1) * (m + 1)` boxed values at roughly a kilobyte each, so
- * the product is what matters rather than either length. Raising rather than
- * trying and being killed lets a caller fall back - to a local alignment on a
- * windowed region, or to a distance instead.
+ * The matrix is `(n + 1) * (m + 1)` boxed values at about 1.1 KB each on
+ * Jennifer 0.27.0 (about 0.2 KB on 0.28.0), so the product is what matters
+ * rather than either length. Raising rather than trying and being killed lets
+ * a caller fall back - to a local alignment on a windowed region, or to a
+ * distance instead.
  *
  * Passing 0 removes the ceiling entirely. That is deliberate - a caller who has
  * the memory and means it should not be overruled by the library - but it is
  * the one way to make this deck exhaust the host's memory, and two sequences of
- * five thousand residues would need about twenty-five gigabytes. Remove the
- * limit only for inputs whose size you already know.
+ * five thousand residues would need about 27 GB on 0.27.0, 5 GB on 0.28.0.
+ * Remove the limit only for inputs whose size you already know.
  *
  * @param n {int} length of the first sequence
  * @param m {int} length of the second
@@ -652,9 +657,9 @@ export func hammingDistance(a as string, b as string) {
 /**
  * The largest `len(a) * len(b)` that `editDistance` computes.
  *
- * Each cell costs about 2 microseconds, so the limit is about 5 seconds: two
- * 1500-residue sequences (2 250 000 cells) fit, two of 1600 do not. Memory is
- * linear and does not bind.
+ * Two 1500-residue sequences (2 250 000 cells) fit, two of 1600 do not; the
+ * 1500 x 1500 case takes 5.5 s on Jennifer 0.27.0 (about 2.4 microseconds a
+ * cell) and 3.0 s on 0.28.0 (about 1.3). Memory is linear and does not bind.
  */
 export def const MAX_EDIT_DISTANCE_CELLS as int init 2500000;
 
@@ -664,8 +669,9 @@ export def const MAX_EDIT_DISTANCE_CELLS as int init 2500000;
  * Levenshtein distance: insertions, deletions and substitutions each cost one.
  * Two rows of `len(b) + 1` entries instead of a full matrix, so memory is O(m)
  * in the second sequence's length (pass the shorter one second); time is O(n*m)
- * at about 2 microseconds a cell, so `len(a) * len(b)` is capped at
- * `MAX_EDIT_DISTANCE_CELLS`. `AlignOptions.maxCells` does not apply.
+ * at about 2.4 microseconds a cell on 0.27.0 (1.3 on 0.28.0), so
+ * `len(a) * len(b)` is capped at `MAX_EDIT_DISTANCE_CELLS`.
+ * `AlignOptions.maxCells` does not apply.
  *
  * @param a {string} the first sequence
  * @param b {string} the second sequence
